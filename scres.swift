@@ -22,7 +22,7 @@ extension String {
     func substringFromLastOcurrenceOf(let needle:String) -> String {
         var str = self
         while let range = str.rangeOfString(needle) {
-            let index2 = advance(range.startIndex, 1)
+            let index2 = range.startIndex.advancedBy(1)
             let range2 = Range<String.Index>(start: index2, end: str.endIndex)
             str = str.substringWithRange(range2)
         }
@@ -60,7 +60,7 @@ func main () -> Void {
     let binary_name = Process.arguments[0].substringFromLastOcurrenceOf("/")
 
     // help message
-    let help_msg = "".join([
+    let help_msg = ([
                 "usage: ",
                 "\(binary_name) ",
                 "[-h|--help] [-l|--list] [-m|--mode displayIndex] \n",
@@ -72,7 +72,7 @@ func main () -> Void {
                 "   -l          list displays\n",
                 "   -m 0        list all mode from a certain display\n",
                 "   -s 0 800    set resolution of display 0 to 800*600\n",
-                ])
+                ]).joinWithSeparator("")
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
 
@@ -214,7 +214,7 @@ func displayModes(let _display:CGDirectDisplayID?, let index:Int, let _modes:[CG
 
 // print a list of all displays
 // used by -l
-func listDisplays(var displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, let count:Int) -> Void {
+func listDisplays(let displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, let count:Int) -> Void {
     for i in 0..<count {
         let di = displayInfo(displayIDs[i], mode:nil)
         print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
