@@ -19,11 +19,11 @@ import CoreVideo
 // http://stackoverflow.com/questions/24044851
 // http://openradar.appspot.com/radar?id=6373877630369792
 extension String {
-    func substringFromLastOcurrenceOf(let needle:String) -> String {
+    func substringFromLastOcurrenceOf(needle:String) -> String {
         var str = self
         while let range = str.rangeOfString(needle) {
             let index2 = range.startIndex.advancedBy(1)
-            let range2 = Range<String.Index>(start: index2, end: str.endIndex)
+            let range2 = Range<String.Index>(index2..<str.endIndex)
             str = str.substringWithRange(range2)
         }
         return str
@@ -150,7 +150,7 @@ func main () -> Void {
     print(help_msg)
 }
 
-func setDisplayMode(let display:CGDirectDisplayID, let mode:CGDisplayMode, let designatedWidth:UInt) -> Void {
+func setDisplayMode(display:CGDirectDisplayID, mode:CGDisplayMode, designatedWidth:UInt) -> Void {
     if CGDisplayModeIsUsableForDesktopGUI(mode) {
     
         let config = UnsafeMutablePointer<CGDisplayConfigRef>.alloc(1);
@@ -174,7 +174,7 @@ func setDisplayMode(let display:CGDirectDisplayID, let mode:CGDisplayMode, let d
 }
 
 // list mode by display id
-func listModesByDisplayID(let _displayID:CGDirectDisplayID?) -> [CGDisplayMode]? {
+func listModesByDisplayID(_displayID:CGDirectDisplayID?) -> [CGDisplayMode]? {
     if let displayID = _displayID {
         if let modeList = CGDisplayCopyAllDisplayModes(displayID, nil) {
             var modesArray = [CGDisplayMode]()
@@ -194,7 +194,7 @@ func listModesByDisplayID(let _displayID:CGDirectDisplayID?) -> [CGDisplayMode]?
     return nil
 }
 
-func displayModes(let _display:CGDirectDisplayID?, let index:Int, let _modes:[CGDisplayMode]?) -> Void {
+func displayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplayMode]?) -> Void {
     if let display = _display {
         if let modes = _modes {
             print("Supported Modes for Display \(index):")
@@ -214,7 +214,7 @@ func displayModes(let _display:CGDirectDisplayID?, let index:Int, let _modes:[CG
 
 // print a list of all displays
 // used by -l
-func listDisplays(let displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, let count:Int) -> Void {
+func listDisplays(displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, count:Int) -> Void {
     for i in 0..<count {
         let di = displayInfo(displayIDs[i], mode:nil)
         print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
@@ -226,9 +226,10 @@ struct DisplayInfo {
     var width:UInt, height:UInt, frequency:UInt
 }
 // return with, height and frequency info for corresponding displayID
-func displayInfo(let display:CGDirectDisplayID, var mode:CGDisplayMode?) -> DisplayInfo {
-    if mode == nil {
-        mode = CGDisplayCopyDisplayMode(display)!
+func displayInfo(display:CGDirectDisplayID, mode:CGDisplayMode?) -> DisplayInfo {
+    var mode_ = mode
+    if mode_ == nil {
+        mode_ = CGDisplayCopyDisplayMode(display)!
     }
     
     let width = UInt( CGDisplayModeGetWidth(mode) )
