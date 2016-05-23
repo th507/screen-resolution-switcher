@@ -110,7 +110,13 @@ func main () -> Void {
             }
 
             if argc < 4 {
-                print("Specify display width")
+                if Int(Process.arguments[2]) < 10 {
+                    print("Specify display width")
+                } else {
+                    
+                    print("Specify display index")
+                }
+                
                 return
             }
 
