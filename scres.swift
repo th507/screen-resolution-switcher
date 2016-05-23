@@ -103,48 +103,67 @@ func main () -> Void {
             return
         }
 
+        
+        
         if Process.arguments[1] == "-s" || Process.arguments[1] == "--set" {
             if argc < 3 {
                 print("Specify a display to set its mode. \(help_display_list)")
                 return
             }
 
+            var singleDisplayMode = false
             if argc < 4 {
                 if Int(Process.arguments[2]) < 10 {
                     print("Specify display width")
+                    return
                 } else {
-                    
-                    print("Specify display index")
+                    if (displayCount == 1) {
+                        singleDisplayMode = true
+                    } else {
+                        print("Specify display index")
+                        return
+                    }
                 }
-                
-                return
             }
 
-
-            if let displayIndex = Int(Process.arguments[2]) {
-                if displayIndex < displayCount {
-                    if let designatedWidth = Process.arguments[3].toUInt() {
-                        if let modesArray = listModesByDisplayID(onlineDisplayIDs[displayIndex]) {
-                            var designatedWidthIndex:Int?
-                            for i in 0..<modesArray.count {
-                                let di = displayInfo(onlineDisplayIDs[displayIndex], mode:modesArray[i])
-                                if di.width == designatedWidth {
-                                    designatedWidthIndex = i
-                                    break
-                                }
-                            }
-                            if designatedWidthIndex != nil {
-                                print("setting display mode")
-                                setDisplayMode(onlineDisplayIDs[displayIndex], mode:modesArray[designatedWidthIndex!], designatedWidth:designatedWidth)
-                            }
-                            else {
-                                print("This mode is unavailable for current desktop GUI")
+            
+            if  var displayIndex = Int(Process.arguments[2]) {
+                let designatedWidthOptional: UInt?
+                
+                if singleDisplayMode == true {
+                    displayIndex = 0
+                    designatedWidthOptional = Process.arguments[2].toUInt()
+                    
+                }
+                
+                else {
+                    if displayIndex >= displayCount {
+                        print("Display index: \(displayIndex) not found. \(help_display_list)")
+                        return
+                    }
+                    
+                    designatedWidthOptional = Process.arguments[3].toUInt()
+                }
+                
+                if let designatedWidth = designatedWidthOptional {
+                    if let modesArray = listModesByDisplayID(onlineDisplayIDs[displayIndex]) {
+                        var designatedWidthIndex:Int?
+                        for i in 0..<modesArray.count {
+                            let di = displayInfo(onlineDisplayIDs[displayIndex], mode:modesArray[i])
+                            if di.width == designatedWidth {
+                                designatedWidthIndex = i
+                                break
                             }
                         }
+                        if designatedWidthIndex != nil {
+                            print("setting display mode")
+                            setDisplayMode(onlineDisplayIDs[displayIndex], mode:modesArray[designatedWidthIndex!], designatedWidth:designatedWidth)
+                        }
+                        else {
+                            print("This mode is unavailable for current desktop GUI")
+                        }
                     }
-                } else {
-                    print("Display index: \(displayIndex) not found. \(help_display_list)")
-                }                
+                }
             }
             
             return
