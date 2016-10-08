@@ -154,11 +154,10 @@ func main () -> Void {
                     if let modesArray = listModesByDisplayID(_displayID:onlineDisplayIDs[displayIndex]) {
                         var designatedWidthIndex:Int?
                         for i in 0..<modesArray.count {
-                            if let di = displayInfo(display:onlineDisplayIDs[displayIndex], mode:modesArray[i]) {
-                                if di.width == designatedWidth {
-                                    designatedWidthIndex = i
-                                    break
-                                }
+                            let di = DisplayInfo.init(displayID:onlineDisplayIDs[displayIndex], mode:modesArray[i])
+                            if di.width == designatedWidth {
+                                designatedWidthIndex = i
+                                break
                             }
                         }
                         if designatedWidthIndex != nil {
@@ -233,9 +232,8 @@ func PrintDisplayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplay
             nf.minimumIntegerDigits = 3 // XXX
 
             for i in 0..<modes.count {
-                if let di = displayInfo(display:display, mode:modes[i]) {
-                    print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
-                }
+                let di = DisplayInfo.init(displayID:display, mode:modes[i])
+                print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
             }
         }
     }
@@ -245,48 +243,54 @@ func PrintDisplayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplay
 // used by -l
 func listDisplays(displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, count:Int) -> Void {
     for i in 0..<count {
-        if let di = displayInfo(display:displayIDs[i], mode:nil) {
-            print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
-        }
+        let di = DisplayInfo.init(displayID:displayIDs[i])
+        print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
     }
 }
 
-
-struct DisplayInfo {
-    var width:UInt, height:UInt, frequency:UInt
-}
 // return with, height and frequency info for corresponding displayID
-func displayInfo(display:CGDirectDisplayID, mode:CGDisplayMode?) -> DisplayInfo? {
-    var mode_ = mode
-    if mode_ == nil {
-        mode_ = CGDisplayCopyDisplayMode(display)
+struct DisplayInfo {
+    var width, height:UInt
+    var frequency:Int
+    
+    init(displayID:CGDirectDisplayID) {
+        let mode = CGDisplayCopyDisplayMode(displayID)
+        self.init(displayID:displayID, mode:mode)
     }
     
-    if let mode__ = mode_ {
-        let width = UInt( mode__.width )
-        let height = UInt( mode__.height )
-        var frequency = UInt( mode__.refreshRate )
-        
-        if frequency == 0 {
-            var link:CVDisplayLink?
+    init(displayID:CGDirectDisplayID, mode:CGDisplayMode?) {
+        if let _mode = mode {
+            width = UInt( _mode.width )
+            height = UInt( _mode.height )
             
-            CVDisplayLinkCreateWithCGDisplay(display, &link)
+            var _frequency = Int( _mode.refreshRate )
             
-            let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+            if _frequency == 0 {
+                var link:CVDisplayLink?
+                
+                CVDisplayLinkCreateWithCGDisplay(displayID, &link)
+                
+                let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+                
+                // timeValue is in fact already in Int64
+                let timeValue = time.timeValue as Int64
+                
+                // a hack-y way to do ceil
+                let timeScale = Int64(time.timeScale) + timeValue / 2
+                
+                _frequency = Int( timeScale / timeValue )
+            }
             
-            // timeValue is in fact already in Int64
-            let timeValue = time.timeValue as Int64
-            
-            // a hack-y way to do ceil
-            let timeScale = Int64(time.timeScale) + timeValue / 2
-            
-            frequency = UInt( timeScale / timeValue )
+            frequency = _frequency
         }
-        
-        return DisplayInfo(width:width, height:height, frequency:frequency)
+        else {
+            width = 0
+            height = 0
+            frequency = 0
+        }
     }
-    return nil
 }
+
 
 // run it
 main()
