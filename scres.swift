@@ -58,10 +58,12 @@ func main () -> Void {
     }
 
     let displayCount:Int = Int(displayCount32)
-
+    
+    let argv = CommandLine.arguments
+    let argc = argv.count
 
     // strip path and leave filename
-    let binary_name = CommandLine.arguments[0].substringFromLastOcurrenceOf(needle:"/")
+    let binary_name = argv[0].substringFromLastOcurrenceOf(needle:"/")
 
     // help message
     let help_msg = ([
@@ -80,23 +82,22 @@ func main () -> Void {
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
 
-    let argc = CommandLine.arguments.count
     if argc > 1 {
-        if CommandLine.arguments[1] == "-l" || CommandLine.arguments[1] == "--list" {
+        if argv[1] == "-l" || argv[1] == "--list" {
             listDisplays(displayIDs:onlineDisplayIDs, count:displayCount)
             return
         }
 
-        if CommandLine.arguments[1] == "-m" || CommandLine.arguments[1] == "--mode" {
+        if argv[1] == "-m" || argv[1] == "--mode" {
             if argc < 3 {
                 print("Specify a display to see its supported modes. \(help_display_list)")
                 return
             }
 
-            if let displayIndex = Int(CommandLine.arguments[2]) {
+            if let displayIndex = Int(argv[2]) {
                 if displayIndex < displayCount {
                     let _info = listModesByDisplayID(_displayID:onlineDisplayIDs[displayIndex])
-                    displayModes(_display:onlineDisplayIDs[displayIndex], index:displayIndex, _modes:_info)
+                    PrintDisplayModes(_display:onlineDisplayIDs[displayIndex], index:displayIndex, _modes:_info)
                     
                 } else {
                     print("Display index: \(displayIndex) not found. \(help_display_list)")
@@ -109,7 +110,7 @@ func main () -> Void {
 
         
         
-        if CommandLine.arguments[1] == "-s" || CommandLine.arguments[1] == "--set" {
+        if argv[1] == "-s" || argv[1] == "--set" {
             if argc < 3 {
                 print("Specify a display to set its mode. \(help_display_list)")
                 return
@@ -118,7 +119,7 @@ func main () -> Void {
             var singleDisplayMode = false
 
             
-            if  var displayIndex = Int(CommandLine.arguments[2]) {
+            if  var displayIndex = Int(argv[2]) {
                 if argc < 4 {
                     if displayIndex < 10 {
                         print("Specify display width")
@@ -136,7 +137,7 @@ func main () -> Void {
                 
                 if singleDisplayMode == true {
                     displayIndex = 0
-                    designatedWidthOptional = CommandLine.arguments[2].toUInt()
+                    designatedWidthOptional = argv[2].toUInt()
                     
                 }
                 
@@ -146,7 +147,7 @@ func main () -> Void {
                         return
                     }
                     
-                    designatedWidthOptional = CommandLine.arguments[3].toUInt()
+                    designatedWidthOptional = argv[3].toUInt()
                 }
                 
                 if let designatedWidth = designatedWidthOptional {
@@ -188,6 +189,7 @@ func setDisplayMode(display:CGDirectDisplayID, mode:CGDisplayMode, designatedWid
         let error = CGBeginDisplayConfiguration(config)
         if error == .success {
             let option:CGConfigureOption = CGConfigureOption(rawValue:2) //XXX: permanently
+            
             CGConfigureDisplayWithDisplayMode(config.pointee, display, mode, nil)
             let afterCheck = CGCompleteDisplayConfiguration(config.pointee, option)
             if afterCheck != .success {
@@ -220,7 +222,7 @@ func listModesByDisplayID(_displayID:CGDirectDisplayID?) -> [CGDisplayMode]? {
     return nil
 }
 
-func displayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplayMode]?) -> Void {
+func PrintDisplayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplayMode]?) -> Void {
     if let display = _display {
         if let modes = _modes {
             print("Supported Modes for Display \(index):")
@@ -257,7 +259,7 @@ struct DisplayInfo {
 func displayInfo(display:CGDirectDisplayID, mode:CGDisplayMode?) -> DisplayInfo? {
     var mode_ = mode
     if mode_ == nil {
-        mode_ = CGDisplayCopyDisplayMode(display)!
+        mode_ = CGDisplayCopyDisplayMode(display)
     }
     
     if let mode__ = mode_ {
