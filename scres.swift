@@ -20,7 +20,7 @@ import CoreVideo
 // http://stackoverflow.com/questions/24044851
 // http://openradar.appspot.com/radar?id=6373877630369792
 extension String {
-    func substringFromLastOcurrenceOf(needle:String) -> String {
+    func substringFromLastOcurrenceOf(_ needle:String) -> String {
         var substring = String.init()
         for (_, c) in self.characters.enumerated() {
             substring.append(c)
@@ -63,7 +63,7 @@ func main () -> Void {
     let argc = argv.count
 
     // strip path and leave filename
-    let binary_name = argv[0].substringFromLastOcurrenceOf(needle:"/")
+    let binary_name = argv[0].substringFromLastOcurrenceOf("/")
 
     // help message
     let help_msg = ([
@@ -119,7 +119,7 @@ func main () -> Void {
             var singleDisplayMode = false
 
             
-            if  var displayIndex = Int(argv[2]) {
+            if var displayIndex = Int(argv[2]) {
                 if argc < 4 {
                     if displayIndex < 10 {
                         print("Specify display width")
@@ -133,11 +133,11 @@ func main () -> Void {
                         }
                     }
                 }
-                let designatedWidthOptional: UInt?
+                let designatedWidthOptional: Int?
                 
                 if singleDisplayMode == true {
                     displayIndex = 0
-                    designatedWidthOptional = argv[2].toUInt()
+                    designatedWidthOptional = Int(argv[2])
                     
                 }
                 
@@ -147,7 +147,7 @@ func main () -> Void {
                         return
                     }
                     
-                    designatedWidthOptional = argv[3].toUInt()
+                    designatedWidthOptional = Int(argv[3])
                 }
                 
                 if let designatedWidth = designatedWidthOptional {
@@ -162,7 +162,7 @@ func main () -> Void {
                         }
                         if designatedWidthIndex != nil {
                             print("setting display mode")
-                            setDisplayMode(display:onlineDisplayIDs[displayIndex], mode:modesArray[designatedWidthIndex!], designatedWidth:designatedWidth)
+                            setDisplayMode(display:onlineDisplayIDs[displayIndex], mode:modesArray[designatedWidthIndex!])
                         }
                         else {
                             print("This mode is unavailable for current desktop GUI")
@@ -180,7 +180,7 @@ func main () -> Void {
     print(help_msg)
 }
 
-func setDisplayMode(display:CGDirectDisplayID, mode:CGDisplayMode, designatedWidth:UInt) -> Void {
+func setDisplayMode(display:CGDirectDisplayID, mode:CGDisplayMode) -> Void {
     if mode.isUsableForDesktopGUI() {
     
         let config = UnsafeMutablePointer<CGDisplayConfigRef?>.allocate(capacity:1);
@@ -231,10 +231,11 @@ func PrintDisplayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplay
             nf.paddingCharacter = " " // XXX: Swift does not support padding yet
             nf.minimumIntegerDigits = 3 // XXX
 
-            for i in 0..<modes.count {
-                let di = DisplayInfo.init(displayID:display, mode:modes[i])
+            for (_, m) in modes.enumerated() {
+                let di = DisplayInfo.init(displayID:display, mode:m)
                 print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
             }
+
         }
     }
 }
@@ -243,51 +244,53 @@ func PrintDisplayModes(_display:CGDirectDisplayID?, index:Int, _modes:[CGDisplay
 // used by -l
 func listDisplays(displayIDs:UnsafeMutablePointer<CGDirectDisplayID>, count:Int) -> Void {
     for i in 0..<count {
-        let di = DisplayInfo.init(displayID:displayIDs[i])
+        let di = DisplayInfo.init(displayIDs[i])
         print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
     }
 }
 
 // return with, height and frequency info for corresponding displayID
 struct DisplayInfo {
-    var width, height:UInt
-    var frequency:Int
+    var width, height, frequency:Int
     
-    init(displayID:CGDirectDisplayID) {
-        let mode = CGDisplayCopyDisplayMode(displayID)
-        self.init(displayID:displayID, mode:mode)
+    init() {
+        width = 0
+        height = 0
+        frequency = 0
     }
     
-    init(displayID:CGDirectDisplayID, mode:CGDisplayMode?) {
-        if let _mode = mode {
-            width = UInt( _mode.width )
-            height = UInt( _mode.height )
-            
-            var _frequency = Int( _mode.refreshRate )
-            
-            if _frequency == 0 {
-                var link:CVDisplayLink?
-                
-                CVDisplayLinkCreateWithCGDisplay(displayID, &link)
-                
-                let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
-                
-                // timeValue is in fact already in Int64
-                let timeValue = time.timeValue as Int64
-                
-                // a hack-y way to do ceil
-                let timeScale = Int64(time.timeScale) + timeValue / 2
-                
-                _frequency = Int( timeScale / timeValue )
-            }
-            
-            frequency = _frequency
+    init(_ displayID:CGDirectDisplayID) {
+        if let mode = CGDisplayCopyDisplayMode(displayID) {
+            self.init(displayID:displayID, mode:mode)
         }
         else {
-            width = 0
-            height = 0
-            frequency = 0
+            self.init()
         }
+    }
+    
+    init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
+        width = mode.width
+        height = mode.height
+        
+        var _frequency = Int( mode.refreshRate )
+        
+        if _frequency == 0 {
+            var link:CVDisplayLink?
+            
+            CVDisplayLinkCreateWithCGDisplay(displayID, &link)
+            
+            let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+            
+            // timeValue is in fact already in Int64
+            let timeValue = time.timeValue as Int64
+            
+            // a hack-y way to do ceil
+            let timeScale = Int64(time.timeScale) + timeValue / 2
+            
+            _frequency = Int( timeScale / timeValue )
+        }
+        
+        frequency = _frequency
     }
 }
 
