@@ -14,25 +14,104 @@ import ApplicationServices
 
 import CoreVideo
 
-
-
-// Swift String is quite powerless at the moment
-// http://stackoverflow.com/questions/24044851
-// http://openradar.appspot.com/radar?id=6373877630369792
-extension String {
-    func substringFromLastOcurrenceOf(_ needle:String) -> String {
-        var substring = ""
-        for (_, c) in self.characters.reversed().enumerated() {
-            if (c == "/") {
-                break
-            }
-            substring = String(c) + substring
+func main () -> Void {
+    let screens = ScreenAssets()
+    
+    guard screens.displayIDs != nil else {
+        print("Unable to get displayIDs")
+        return
+    }
+    
+    let input = UserInput(arguments:CommandLine.arguments)
+    
+    // strip path and leave filename
+    let binary_name = input.binary_name()
+    
+    // help message
+    let help_msg = ([
+        "usage: ",
+        "\(binary_name) ",
+        "[-h|--help] [-l|--list] [-m|--mode displayIndex] \n",
+        "[-s|--set displayIndex width]",
+        "\n\n",
+        
+        "Here are some examples:\n",
+        "   -h          get help\n",
+        "   -l          list displays\n",
+        "   -m 0        list all mode from a certain display\n",
+        "   -s 0 800    set resolution of display 0 to 800*600\n",
+        ]).joined(separator:"")
+    let help_display_list = "List all available displays by:\n    \(binary_name) -l"
+    
+    
+    // dipatch functions
+    switch input.intention {
+    case .listDisplays:
+        screens.listDisplays()
+        return
+    case .listModes:
+        let displayIndex = Int( input.argument(at:2) ?? "0" )!
+        
+        guard displayIndex < screens.displayCount else {
+            print("Display index( \(displayIndex) ) not found. \(help_display_list)")
+            return
         }
         
-        return substring
+        print("Supported Modes for Display \(displayIndex):")
+        screens.display(at:displayIndex).showModes()
+        
+        return
+    case .setMode:
+        guard input.count > 2 else {
+            print("Specify a display to set its mode. \(help_display_list)")
+            return
+        }
+
+        // allow user to omit displayIndex if only one display is attached
+        var displayIndex = input.argument(at:2)
+        var designatedWidth = input.argument(at:3)
+        
+        guard let _index = UInt32(displayIndex!) else {
+            print("Illegal display index")
+            return
+        }
+
+        if designatedWidth == nil {
+            if _index < screens.maxDisplays {
+                print("Specify display width")
+                return
+            }
+            else {
+                guard screens.displayCount == 1 else {
+                    print("Specify display index")
+                    return
+                }
+                
+                designatedWidth = displayIndex
+                displayIndex = "0"
+            }
+        }
+        
+        guard let index = Int(displayIndex!), let width = Int(designatedWidth!) else {
+            print("Unable to get display")
+            return
+        }
+
+        let display = screens.display(at:index)
+        
+        guard let modeIndex = display.mode(width:width) else {
+            print("This mode is unavailable for current desktop GUI")
+            return
+        }
+        
+        print("setting display mode")
+
+        display.set(modeIndex:modeIndex)
+        return
+    default:
+        print(help_msg)
     }
 }
-
 
 struct UserInput {
     enum Intention {
@@ -73,103 +152,24 @@ struct UserInput {
         
         return nil
     }
-}
-
-
-func main () -> Void {
-    let screens = ScreenAssets()
     
-    guard let onlineDisplayIDs = screens.displayIDs else {
-        print("Unable to get displayIDs")
-        return
-    }
-    
-    let input = UserInput(arguments:CommandLine.arguments)
-    
-    // strip path and leave filename
-    let binary_name = input.argument(at:0)!.substringFromLastOcurrenceOf("/")
-    
-    // help message
-    let help_msg = ([
-        "usage: ",
-        "\(binary_name) ",
-        "[-h|--help] [-l|--list] [-m|--mode displayIndex] \n",
-        "[-s|--set displayIndex width]",
-        "\n\n",
+    // Swift String is quite powerless at the moment
+    // http://stackoverflow.com/questions/24044851
+    // http://openradar.appspot.com/radar?id=6373877630369792
+    func binary_name() -> String {
+        var raw_name = self.argument(at:0)!
         
-        "Here are some examples:\n",
-        "   -h          get help\n",
-        "   -l          list displays\n",
-        "   -m 0        list all mode from a certain display\n",
-        "   -s 0 800    set resolution of display 0 to 800*600\n",
-        ]).joined(separator:"")
-    let help_display_list = "List all available displays by:\n    \(binary_name) -l"
-    
-    
-    // dipatch functions
-    switch input.intention {
-    case .listDisplays:
-        screens.listDisplays()
-        return
-    case .listModes:
-        let displayIndex = Int( input.argument(at:2) ?? "0" )!
-        
-        guard displayIndex < screens.displayCount else {
-            print("Display index( \(displayIndex) ) not found. \(help_display_list)")
-            return
-        }
-        
-        print("Supported Modes for Display \(displayIndex):")
-        DisplayUtil(onlineDisplayIDs[displayIndex]).showModes()
-        
-        return
-    case .setMode:
-        guard input.count > 2 else {
-            print("Specify a display to set its mode. \(help_display_list)")
-            return
-        }
-        
-        let singleDisplayMode = screens.displayCount == 1
-        
-        var displayIndex = input.argument(at:2)
-        var designatedWidth = input.argument(at:3)
-        
-
-        if designatedWidth == nil {
-            if UInt32(displayIndex!)! < screens.maxDisplays {
-                print("Specify display width")
-                return
+        var substring = ""
+        for (_, c) in raw_name.characters.reversed().enumerated() {
+            if (c == "/") {
+                break
             }
-            else {
-                guard singleDisplayMode else {
-                    print("Specify display index")
-                    return
-                }
-                
-                designatedWidth = displayIndex
-                displayIndex = "0"
-            }
+            substring = String(c) + substring
         }
         
-        let _index = Int(displayIndex!)!
-        let _width = Int(designatedWidth!)!
-        
-        let x = DisplayUtil(onlineDisplayIDs[_index])
-        
-        if let modeIndex = x.mode(width:_width) {
-            print("setting display mode")
-            x.set(mode:x.modes()![modeIndex])
-        }
-        else {
-            print("This mode is unavailable for current desktop GUI")
-        }
-    
-        return
-    default:
-        print(help_msg)
+        return substring
     }
 }
-
 
 
 class ScreenAssets {
@@ -203,10 +203,14 @@ class ScreenAssets {
     func listDisplays() {
         if let displayIDs = self.displayIDs {
             for i in 0..<self.displayCount {
-                let di = DisplayInfo.init(displayIDs[i])
+                let di = DisplayInfo(displayIDs[i])
                 print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
             }
         }
+    }
+    
+    func display(at:Int) -> DisplayUtil {
+        return DisplayUtil(displayIDs![at])
     }
 }
 
@@ -225,7 +229,7 @@ class DisplayUtil {
             nf.minimumIntegerDigits = 3 // XXX
             
             for (_, m) in modes.enumerated() {
-                let di = DisplayInfo.init(displayID:displayID, mode:m)
+                let di = DisplayInfo(displayID:displayID, mode:m)
                 print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
             }
         }
@@ -254,7 +258,7 @@ class DisplayUtil {
         var index:Int?
         if let modesArray = self.modes() {
             for (i, m) in modesArray.enumerated() {
-                let di = DisplayInfo.init(displayID:displayID, mode:m)
+                let di = DisplayInfo(displayID:displayID, mode:m)
                 if di.width == width {
                     index = i
                     break
@@ -284,6 +288,14 @@ class DisplayUtil {
                 CGCancelDisplayConfiguration(config.pointee)
             }
         }
+    }
+    
+    func set(modeIndex:Int) {
+        guard let modes = self.modes(), modeIndex < modes.count else {
+            return
+        }
+        
+        self.set(mode:modes[modeIndex])
     }
     
 }
