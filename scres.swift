@@ -1,7 +1,7 @@
 #!/usr/bin/env xcrun swift
 
 //
-//  res.swift
+//  scres.swift
 //
 //
 //  Created by John Liu on 2014/10/02.
@@ -31,8 +31,8 @@ func main () -> Void {
     let help_msg = ([
         "usage: ",
         "\(binary_name) ",
-        "[-h|--help] [-l|--list] [-m|--mode displayIndex] \n",
-        "[-s|--set displayIndex width]",
+        "[-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex] \n",
+        "[-s|--set|set displayIndex width]",
         "\n\n",
         
         "Here are some examples:\n",
@@ -134,11 +134,11 @@ struct UserInput {
             return
         }
         switch arguments[1] {
-        case "-l", "--list":
+        case "-l", "--list", "list":
             intention = Intention.listDisplays
-        case "-m", "--mode":
+        case "-m", "--mode", "mode":
             intention = Intention.listModes
-        case "-s", "--set":
+        case "-s", "--set", "set":
             intention = Intention.setMode
         default:
             intention = Intention.seeHelp
