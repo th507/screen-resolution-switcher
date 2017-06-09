@@ -22,7 +22,7 @@ func main () -> Void {
         return
     }
     
-    let input = UserInput(arguments:CommandLine.arguments)
+    let input = UserInput(CommandLine.arguments)
     
     // strip path and leave filename
     let binary_name = input.binary_name()
@@ -48,10 +48,8 @@ func main () -> Void {
     switch input.intention {
     case .listDisplays:
         screens.listDisplays()
-        return
-    case .listModes:
-        let displayIndex = Int( input.argument(at:2) ?? "0" )!
         
+    case let .listModes(displayIndex):
         guard displayIndex < screens.displayCount else {
             print("Display index( \(displayIndex) ) not found. \(help_display_list)")
             return
@@ -60,7 +58,6 @@ func main () -> Void {
         print("Supported Modes for Display \(displayIndex):")
         screens.display(at:displayIndex).showModes()
         
-        return
     case .setMode:
         guard input.count > 2 else {
             print("Specify a display to set its mode. \(help_display_list)")
@@ -107,7 +104,7 @@ func main () -> Void {
         print("setting display mode")
 
         display.set(modeIndex:modeIndex)
-        return
+        
     default:
         print(help_msg)
     }
@@ -116,7 +113,7 @@ func main () -> Void {
 struct UserInput {
     enum Intention {
         case listDisplays
-        case listModes
+        case listModes(Int)
         case setMode
         case seeHelp
     }
@@ -126,7 +123,7 @@ struct UserInput {
     var arguments:[String]
     var count:Int
     
-    init(arguments:[String]) {
+    init(_ arguments:[String]) {
         self.arguments = arguments
         self.count = arguments.count
         if self.count < 2 {
@@ -137,7 +134,13 @@ struct UserInput {
         case "-l", "--list", "list":
             intention = Intention.listDisplays
         case "-m", "--mode", "mode":
-            intention = Intention.listModes
+            if let displayIndex = Int(self.arguments[2]) {
+                intention = Intention.listModes(displayIndex)
+            }
+            else {
+                intention = Intention.listModes(0)
+            }
+            
         case "-s", "--set", "set":
             intention = Intention.setMode
         default:
@@ -157,17 +160,9 @@ struct UserInput {
     // http://stackoverflow.com/questions/24044851
     // http://openradar.appspot.com/radar?id=6373877630369792
     func binary_name() -> String {
-        var raw_name = self.argument(at:0)!
-        
-        var substring = ""
-        for (_, c) in raw_name.characters.reversed().enumerated() {
-            if (c == "/") {
-                break
-            }
-            substring = String(c) + substring
-        }
-        
-        return substring
+        let absolutePath = self.argument(at:0)!
+        let range = absolutePath.range(of: "/", options: .backwards)!
+        return absolutePath.substring(from:range.upperBound)
     }
 }
 
