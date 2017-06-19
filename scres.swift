@@ -21,7 +21,7 @@ func main () -> Void {
         print("Unable to get displayIDs")
         return
     }
-    
+
     let input = UserInput(CommandLine.arguments)
     
     // strip path and leave filename
@@ -161,8 +161,11 @@ struct UserInput {
     // http://openradar.appspot.com/radar?id=6373877630369792
     func binary_name() -> String {
         let absolutePath = self.argument(at:0)!
-        let range = absolutePath.range(of: "/", options: .backwards)!
-        return absolutePath.substring(from:range.upperBound)
+        if let range = absolutePath.range(of: "/", options: .backwards) {
+          return absolutePath.substring(from:range.upperBound)
+        }
+
+        return absolutePath
     }
 }
 
