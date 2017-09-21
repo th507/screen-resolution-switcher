@@ -161,10 +161,10 @@ struct UserInput {
     // http://openradar.appspot.com/radar?id=6373877630369792
     func binary_name() -> String {
         let absolutePath = self.argument(at:0)!
-        if let range = absolutePath.range(of: "/", options: .backwards) {
-          return absolutePath.substring(from:range.upperBound)
-        }
 
+        if let range = absolutePath.range(of: "/", options: .backwards) {
+            return String( absolutePath[range] )
+        }
         return absolutePath
     }
 }
