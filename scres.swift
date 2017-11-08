@@ -134,11 +134,16 @@ struct UserInput {
         case "-l", "--list", "list":
             intention = Intention.listDisplays
         case "-m", "--mode", "mode":
-            if let displayIndex = Int(self.arguments[2]) {
-                intention = Intention.listModes(displayIndex)
+            if self.count == 2 {
+                intention = Intention.listModes(0)
             }
             else {
-                intention = Intention.listModes(0)
+                if let displayIndex = Int(self.arguments[2]) {
+                    intention = Intention.listModes(displayIndex)
+                }
+                else {
+                    intention = Intention.listModes(0)
+                }
             }
             
         case "-s", "--set", "set":
