@@ -39,6 +39,7 @@ func main () -> Void {
         "   -h          get help\n",
         "   -l          list displays\n",
         "   -m 0        list all mode from a certain display\n",
+        "   -m          shorthand for -m 0\n",
         "   -s 0 800 2  set resolution of display 0 to 800 [x 600] @ 2x [@ 60Hz]\n",
         "   -s 0 800    shorthand for -s 0 800 1\n",
         "   -s 800      shorthand for -s 0 800 1\n",
