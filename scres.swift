@@ -244,9 +244,14 @@ class DisplayUtil {
     
     func showModes() {
         if let modes = self.modes() {
+            var displayed = Set<DisplayInfo>()
             for (_, m) in modes.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
+                if (displayed.contains(di)) {
+                    continue;
+                }
                 print("       \(di.format())")
+                displayed.insert(di)
             }
         }
     }
@@ -320,7 +325,7 @@ class DisplayUtil {
 }
 
 // return with, height and frequency info for corresponding displayID
-struct DisplayInfo {
+struct DisplayInfo: Hashable {
     var width, height, scale, frequency:Int
     
     init() {
@@ -376,6 +381,17 @@ struct DisplayInfo {
             scale,
             frequency
         )
+    }
+
+    static func == (lhs: DisplayInfo, rhs: DisplayInfo) -> Bool {
+        return lhs.width == rhs.width && lhs.height == rhs.height && lhs.scale == rhs.scale && lhs.frequency == rhs.frequency
+    }
+
+    // Hasher is not available in XCode 9 yet. :-(
+    // https://developer.apple.com/documentation/swift/hashable?changes=_9
+    var hashValue: Int {
+        // Overflows a little, but works.
+        return width + 10000 * (height * 10000 * (scale + 10 * frequency))
     }
 }
 
