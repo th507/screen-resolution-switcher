@@ -21,11 +21,20 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 
 ### Set display resolution for a certain display
 ```bash
-# Set resolution of display 0 to 2880*1800
+# Set resolution of display 0 to 2880 x 1800
 ./scres.swift -s 0 2880
 
 # if only one display is attached
 ./scres.swift -s 2880
+```
+
+### Set display resolution with a scaling factor
+```bash
+# Set resolution of display 0 to 2880 x 1800 @ 2x
+#
+# Note that you must pass in the display number
+# if you want to set a scaling factor.
+./scres.swift -s 0 2880 2
 ```
 
 ### Show quick help
