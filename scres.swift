@@ -32,8 +32,7 @@ func main () -> Void {
         "usage: ",
         "\(binary_name) ",
         "[-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex] \n",
-        "[-s|--set|set displayIndex width scale]",
-        "[-r|--set-retina|retina displayIndex width]",
+        "[-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width]",
         "\n\n",
         
         "Here are some examples:\n",
