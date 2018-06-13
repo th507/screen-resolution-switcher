@@ -40,6 +40,7 @@ func main () -> Void {
         "   -l          list displays\n",
         "   -m 0        list all mode from a certain display\n",
         "   -s 0 800    set resolution of display 0 to 800*600\n",
+        "   -s 0 800 2  set resolution of display 0 to 800*600@2x\n",
         ]).joined(separator:"")
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
@@ -67,6 +68,7 @@ func main () -> Void {
         // allow user to omit displayIndex if only one display is attached
         var displayIndex = input.argument(at:2)
         var designatedWidth = input.argument(at:3)
+        var designatedScale = input.argument(at:4)
         
         guard let _index = UInt32(displayIndex!) else {
             print("Illegal display index")
@@ -88,15 +90,19 @@ func main () -> Void {
                 displayIndex = "0"
             }
         }
-        
-        guard let index = Int(displayIndex!), let width = Int(designatedWidth!) else {
+
+        if designatedScale == nil {
+            designatedScale = "1"
+        }
+
+        guard let index = Int(displayIndex!), let width = Int(designatedWidth!), let scale = Int(designatedScale!) else {
             print("Unable to get display")
             return
         }
 
         let display = screens.display(at:index)
         
-        guard let modeIndex = display.mode(width:width) else {
+        guard let modeIndex = display.mode(width:width, scale:scale) else {
             print("This mode is unavailable for current desktop GUI")
             return
         }
@@ -207,7 +213,7 @@ class ScreenAssets {
         if let displayIDs = self.displayIDs {
             for i in 0..<self.displayCount {
                 let di = DisplayInfo(displayIDs[i])
-                print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
+                print("Display \(i):  \(di.width) x \(di.height) @ \(di.scale)x @ \(di.frequency)Hz")
             }
         }
     }
@@ -233,13 +239,16 @@ class DisplayUtil {
             
             for (_, m) in modes.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
-                print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
+                print("       \(di.width) x \(di.height) @ \(di.scale)x @ \(di.frequency)Hz")
             }
         }
     }
     
     func modes() -> [CGDisplayMode]? {
-        if let modeList = CGDisplayCopyAllDisplayModes(displayID, nil) {
+
+        let options: CFDictionary = [kCGDisplayShowDuplicateLowResolutionModes as String : 1] as CFDictionary
+
+        if let modeList = CGDisplayCopyAllDisplayModes(displayID, options) {
             var modesArray = [CGDisplayMode]()
             
             let count = CFArrayGetCount(modeList)
@@ -257,12 +266,12 @@ class DisplayUtil {
         return nil
     }
     
-    func mode(width:Int) -> Int? {
+    func mode(width:Int, scale:Int) -> Int? {
         var index:Int?
         if let modesArray = self.modes() {
             for (i, m) in modesArray.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
-                if di.width == width {
+                if di.width == width && di.scale == scale {
                     index = i
                     break
                 }
@@ -305,11 +314,12 @@ class DisplayUtil {
 
 // return with, height and frequency info for corresponding displayID
 struct DisplayInfo {
-    var width, height, frequency:Int
+    var width, height, scale, frequency:Int
     
     init() {
         width = 0
         height = 0
+        scale = 0
         frequency = 0
     }
     
@@ -325,6 +335,8 @@ struct DisplayInfo {
     init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
         width = mode.width
         height = mode.height
+
+        scale = mode.pixelWidth / mode.width;
         
         var _frequency = Int( mode.refreshRate )
         
