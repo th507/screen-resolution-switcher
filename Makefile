@@ -2,7 +2,7 @@ SRC = scres.swift
 
 BIN = swiftc
 
-OUTPUT = retina
+OUTPUT = scres
 
 FLAGS= -O -o
 
