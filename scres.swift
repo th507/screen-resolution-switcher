@@ -33,6 +33,7 @@ func main () -> Void {
         "\(binary_name) ",
         "[-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex] \n",
         "[-s|--set|set displayIndex width scale]",
+        "[-r|--set-retina|retina displayIndex width]",
         "\n\n",
         
         "Here are some examples:\n",
@@ -40,10 +41,14 @@ func main () -> Void {
         "   -l          list displays\n",
         "   -m 0        list all mode from a certain display\n",
         "   -s 0 800    set resolution of display 0 to 800 [x 600] \n",
+        "   -s 800      shorthand for -s 0 800 \n",
         "   -s 0 800 2  set resolution of display 0 to 800 [x 600] @ 2x [@ 60Hz]\n",
+        "   -r 0 800    shorthand for -s 0 800 2\n",
+        "   -r 800      shorthand for -s 0 800 2\n",
         ]).joined(separator:"")
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
+    var defaultDesignatedScale = "1";
     
     // dipatch functions
     switch input.intention {
@@ -59,6 +64,9 @@ func main () -> Void {
         print("Supported Modes for Display \(displayIndex):")
         screens.display(at:displayIndex).showModes()
         
+    case .setRetina:
+        defaultDesignatedScale = "2"
+        fallthrough
     case .setMode:
         guard input.count > 2 else {
             print("Specify a display to set its mode. \(help_display_list)")
@@ -92,7 +100,7 @@ func main () -> Void {
         }
 
         if designatedScale == nil {
-            designatedScale = "1"
+            designatedScale = defaultDesignatedScale
         }
 
         guard let index = Int(displayIndex!), let width = Int(designatedWidth!), let scale = Int(designatedScale!) else {
@@ -101,13 +109,15 @@ func main () -> Void {
         }
 
         let display = screens.display(at:index)
+
+        print("Attempting to set resolution matching: \(width) x ____ @ \(scale)x @ __Hz")
         
         guard let modeIndex = display.mode(width:width, scale:scale) else {
             print("This mode is unavailable for current desktop GUI")
             return
         }
         
-        print("setting display mode")
+        print("Setting display mode")
 
         display.set(modeIndex:modeIndex)
         
@@ -121,6 +131,7 @@ struct UserInput {
         case listDisplays
         case listModes(Int)
         case setMode
+        case setRetina
         case seeHelp
     }
     
@@ -154,6 +165,8 @@ struct UserInput {
             
         case "-s", "--set", "set":
             intention = Intention.setMode
+        case "-r", "--set-retina", "retina":
+            intention = Intention.setRetina
         default:
             intention = Intention.seeHelp
         }
