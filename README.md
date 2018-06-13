@@ -47,11 +47,11 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 
 ### Compile to binary (which runs faster)
 ```bash
-# compile output write to `retina`
+# compile output write to `scres`
 make
 
 # run binary
-./retina -h
+./scres -h
 ```
 
 # License
