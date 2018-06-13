@@ -39,8 +39,8 @@ func main () -> Void {
         "   -h          get help\n",
         "   -l          list displays\n",
         "   -m 0        list all mode from a certain display\n",
-        "   -s 0 800    set resolution of display 0 to 800*600\n",
-        "   -s 0 800 2  set resolution of display 0 to 800*600@2x\n",
+        "   -s 0 800    set resolution of display 0 to 800 [x 600] \n",
+        "   -s 0 800 2  set resolution of display 0 to 800 [x 600] @ 2x [@ 60Hz]\n",
         ]).joined(separator:"")
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
@@ -213,7 +213,7 @@ class ScreenAssets {
         if let displayIDs = self.displayIDs {
             for i in 0..<self.displayCount {
                 let di = DisplayInfo(displayIDs[i])
-                print("Display \(i):  \(di.width) x \(di.height) @ \(di.scale)x @ \(di.frequency)Hz")
+                print("Display \(i):  \(di.format())")
             }
         }
     }
@@ -232,14 +232,9 @@ class DisplayUtil {
     
     func showModes() {
         if let modes = self.modes() {
-            let nf = NumberFormatter()
-            nf.paddingPosition = NumberFormatter.PadPosition.beforePrefix
-            nf.paddingCharacter = " " // XXX: Swift does not support padding yet
-            nf.minimumIntegerDigits = 3 // XXX
-            
             for (_, m) in modes.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
-                print("       \(di.width) x \(di.height) @ \(di.scale)x @ \(di.frequency)Hz")
+                print("       \(di.format())")
             }
         }
     }
@@ -357,6 +352,18 @@ struct DisplayInfo {
         }
         
         frequency = _frequency
+    }
+
+    func format() -> String {
+        // We assume that 4 digits are enough to hold dimensions.
+        // 10K monitor users will just have to live with a bit of formatting misalignment.
+        return String(
+            format:"%4d x %4d @ %dx @ %dHz",
+            width,
+            height,
+            scale,
+            frequency
+        )
     }
 }
 
