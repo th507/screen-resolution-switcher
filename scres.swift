@@ -325,7 +325,7 @@ class DisplayUtil {
     
 }
 
-// return with, height and frequency info for corresponding displayID
+// return width, height and frequency info for corresponding displayID
 struct DisplayInfo: Hashable {
     var width, height, scale, frequency:Int
     
