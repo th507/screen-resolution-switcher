@@ -32,17 +32,23 @@ func main () -> Void {
         "usage: ",
         "\(binary_name) ",
         "[-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex] \n",
-        "[-s|--set|set displayIndex width]",
+        "[-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width]",
         "\n\n",
         
         "Here are some examples:\n",
         "   -h          get help\n",
         "   -l          list displays\n",
         "   -m 0        list all mode from a certain display\n",
-        "   -s 0 800    set resolution of display 0 to 800*600\n",
+        "   -m          shorthand for -m 0\n",
+        "   -s 0 800 2  set resolution of display 0 to 800 [x 600] @ 2x [@ 60Hz]\n",
+        "   -s 0 800    shorthand for -s 0 800 1\n",
+        "   -s 800      shorthand for -s 0 800 1\n",
+        "   -r 0 800    shorthand for -s 0 800 2\n",
+        "   -r 800      shorthand for -s 0 800 2\n",
         ]).joined(separator:"")
     let help_display_list = "List all available displays by:\n    \(binary_name) -l"
     
+    var defaultDesignatedScale = "1";
     
     // dipatch functions
     switch input.intention {
@@ -58,6 +64,9 @@ func main () -> Void {
         print("Supported Modes for Display \(displayIndex):")
         screens.display(at:displayIndex).showModes()
         
+    case .setRetina:
+        defaultDesignatedScale = "2"
+        fallthrough
     case .setMode:
         guard input.count > 2 else {
             print("Specify a display to set its mode. \(help_display_list)")
@@ -67,6 +76,7 @@ func main () -> Void {
         // allow user to omit displayIndex if only one display is attached
         var displayIndex = input.argument(at:2)
         var designatedWidth = input.argument(at:3)
+        var designatedScale = input.argument(at:4)
         
         guard let _index = UInt32(displayIndex!) else {
             print("Illegal display index")
@@ -88,20 +98,26 @@ func main () -> Void {
                 displayIndex = "0"
             }
         }
-        
-        guard let index = Int(displayIndex!), let width = Int(designatedWidth!) else {
+
+        if designatedScale == nil {
+            designatedScale = defaultDesignatedScale
+        }
+
+        guard let index = Int(displayIndex!), let width = Int(designatedWidth!), let scale = Int(designatedScale!) else {
             print("Unable to get display")
             return
         }
 
         let display = screens.display(at:index)
+
+        print("Attempting to set resolution matching: \(width) x ____ @ \(scale)x @ __Hz")
         
-        guard let modeIndex = display.mode(width:width) else {
+        guard let modeIndex = display.mode(width:width, scale:scale) else {
             print("This mode is unavailable for current desktop GUI")
             return
         }
         
-        print("setting display mode")
+        print("Setting display mode")
 
         display.set(modeIndex:modeIndex)
         
@@ -115,6 +131,7 @@ struct UserInput {
         case listDisplays
         case listModes(Int)
         case setMode
+        case setRetina
         case seeHelp
     }
     
@@ -148,6 +165,8 @@ struct UserInput {
             
         case "-s", "--set", "set":
             intention = Intention.setMode
+        case "-r", "--set-retina", "retina":
+            intention = Intention.setRetina
         default:
             intention = Intention.seeHelp
         }
@@ -207,7 +226,7 @@ class ScreenAssets {
         if let displayIDs = self.displayIDs {
             for i in 0..<self.displayCount {
                 let di = DisplayInfo(displayIDs[i])
-                print("Display \(i):  \(di.width) * \(di.height) @ \(di.frequency)Hz")
+                print("Display \(i):  \(di.format())")
             }
         }
     }
@@ -226,20 +245,23 @@ class DisplayUtil {
     
     func showModes() {
         if let modes = self.modes() {
-            let nf = NumberFormatter()
-            nf.paddingPosition = NumberFormatter.PadPosition.beforePrefix
-            nf.paddingCharacter = " " // XXX: Swift does not support padding yet
-            nf.minimumIntegerDigits = 3 // XXX
-            
+            var displayed = Set<DisplayInfo>()
             for (_, m) in modes.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
-                print("       \(di.width) * \(di.height) @ \(di.frequency)Hz")
+                if (displayed.contains(di)) {
+                    continue;
+                }
+                print("       \(di.format())")
+                displayed.insert(di)
             }
         }
     }
     
     func modes() -> [CGDisplayMode]? {
-        if let modeList = CGDisplayCopyAllDisplayModes(displayID, nil) {
+
+        let options: CFDictionary = [kCGDisplayShowDuplicateLowResolutionModes as String : 1] as CFDictionary
+
+        if let modeList = CGDisplayCopyAllDisplayModes(displayID, options) {
             var modesArray = [CGDisplayMode]()
             
             let count = CFArrayGetCount(modeList)
@@ -257,12 +279,12 @@ class DisplayUtil {
         return nil
     }
     
-    func mode(width:Int) -> Int? {
+    func mode(width:Int, scale:Int) -> Int? {
         var index:Int?
         if let modesArray = self.modes() {
             for (i, m) in modesArray.enumerated() {
                 let di = DisplayInfo(displayID:displayID, mode:m)
-                if di.width == width {
+                if di.width == width && di.scale == scale {
                     index = i
                     break
                 }
@@ -304,12 +326,13 @@ class DisplayUtil {
 }
 
 // return with, height and frequency info for corresponding displayID
-struct DisplayInfo {
-    var width, height, frequency:Int
+struct DisplayInfo: Hashable {
+    var width, height, scale, frequency:Int
     
     init() {
         width = 0
         height = 0
+        scale = 0
         frequency = 0
     }
     
@@ -325,6 +348,8 @@ struct DisplayInfo {
     init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
         width = mode.width
         height = mode.height
+
+        scale = mode.pixelWidth / mode.width;
         
         var _frequency = Int( mode.refreshRate )
         
@@ -345,6 +370,29 @@ struct DisplayInfo {
         }
         
         frequency = _frequency
+    }
+
+    func format() -> String {
+        // We assume that 4 digits are enough to hold dimensions.
+        // 10K monitor users will just have to live with a bit of formatting misalignment.
+        return String(
+            format:"%4d x %4d @ %dx @ %dHz",
+            width,
+            height,
+            scale,
+            frequency
+        )
+    }
+
+    static func == (lhs: DisplayInfo, rhs: DisplayInfo) -> Bool {
+        return lhs.width == rhs.width && lhs.height == rhs.height && lhs.scale == rhs.scale && lhs.frequency == rhs.frequency
+    }
+
+    // Hasher is not available in XCode 9 yet. :-(
+    // https://developer.apple.com/documentation/swift/hashable?changes=_9
+    var hashValue: Int {
+        // Overflows a little, but works.
+        return width + 10000 * (height * 10000 * (scale + 10 * frequency))
     }
 }
 

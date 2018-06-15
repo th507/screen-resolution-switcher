@@ -21,11 +21,23 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 
 ### Set display resolution for a certain display
 ```bash
-# Set resolution of display 0 to 2880*1800
+# Set resolution of display 0 to 2880 x 1800
 ./scres.swift -s 0 2880
 
 # if only one display is attached
 ./scres.swift -s 2880
+```
+
+### Set display resolution with a scaling factor
+```bash
+# Set resolution of display 0 to 2880 x 1800 @ 2x
+./scres.swift -s 0 2880 2
+
+# Use -r for the common "Retina" scaling factor of 2.
+./scres.swift -r 0 2880
+
+# if only one display is attached
+./scres.swift -r 2880
 ```
 
 ### Show quick help
@@ -35,11 +47,11 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 
 ### Compile to binary (which runs faster)
 ```bash
-# compile output write to `retina`
+# compile output write to `scres`
 make
 
 # run binary
-./retina -h
+./scres -h
 ```
 
 # License
