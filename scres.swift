@@ -388,6 +388,12 @@ struct DisplayInfo: Hashable {
         return lhs.width == rhs.width && lhs.height == rhs.height && lhs.scale == rhs.scale && lhs.frequency == rhs.frequency
     }
 
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(width)
+        hasher.combine(height)
+        hasher.combine(scale)
+        hasher.combine(frequency)
+    }
     // Hasher is not available in XCode 9 yet. :-(
     // https://developer.apple.com/documentation/swift/hashable?changes=_9
     var hashValue: Int {
