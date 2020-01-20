@@ -25,6 +25,7 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 ./scres.swift -s 0 2880
 
 # if only one display is attached
+# (by default it will try to use retina mode if possible)
 ./scres.swift -s 2880
 ```
 
@@ -33,11 +34,11 @@ Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook 
 # Set resolution of display 0 to 2880 x 1800 @ 2x
 ./scres.swift -s 0 2880 2
 
-# Use -r for the common "Retina" scaling factor of 2.
+# -r behave the same as -s
 ./scres.swift -r 0 2880
 
 # if only one display is attached
-./scres.swift -r 2880
+./scres.swift -s 2880
 ```
 
 ### Show quick help
