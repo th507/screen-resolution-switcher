@@ -1,7 +1,7 @@
 # Screen resolution switcher (in Swift)
 This is a simple (mac) screen resolution switcher written in Swift.
 
-Tested with Swift 3.0, Xcode 8.0, OS X Sierra 10.12.1 (16B2555), Retina MacBook Pro (Mid 2014).
+Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), Retina MacBook Pro (Mid 2015).
 
 # Usage
 ### List attached displays
@@ -56,6 +56,6 @@ make
 ```
 
 # License
-Copyright (c) 2016 Jingwei "John" Liu
+Copyright (c) 2020 Jingwei "John" Liu
 
 Licensed under the MIT license.
