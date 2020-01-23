@@ -330,5 +330,9 @@ func main () {
     }
 }
 
-// run it
-main()
+#if os(macOS)
+    // run it
+    main()
+#else
+    print("This script currently only runs on macOS")
+#endif
