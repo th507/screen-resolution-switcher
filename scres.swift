@@ -217,12 +217,32 @@ struct DisplayInfo: Hashable {
     }
 }
 
+// from Sindre Sorhus
+// https://github.com/sindresorhus/dark-mode/blob/master/Sources/DarkMode.swift
+struct DarkMode {
+    private static let prefix = "tell application \"System Events\" to tell appearance preferences to"
+
+    static var isEnabled: Bool {
+        get {
+            UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        }
+        set {
+            toggle(force: newValue)
+        }
+    }
+
+    static func toggle(force: Bool? = nil) {
+        let value = force.map(String.init) ?? "not dark mode"
+        NSAppleScript(source: "\(prefix) set dark mode to \(value)")?.executeAndReturnError(nil)
+    }
+}
 
 struct UserInput {
     enum Intention {
         case listDisplays
         case listModes(Int)
         case setMode
+        case darkMode
         case seeHelp
     }
     
@@ -248,6 +268,8 @@ struct UserInput {
             intention = Intention.listModes(index)
         case "-s", "--set", "set", "-r", "--set-retina", "retina":
             intention = Intention.setMode
+        case "-d", "--toggle-dark-mode":
+            intention = Intention.darkMode
         default:
             intention = Intention.seeHelp
         }
@@ -272,11 +294,12 @@ Here are some examples:
    -l          list displays
    -m 0        list all mode from a certain display
    -m          shorthand for -m 0
-   -s 0 800 2  set resolution of display 0 to 800 [x 600] @ 2x [@ 60Hz]
-   -s 0 800    shorthand for -s 0 800 1
-   -s 800      shorthand for -s 0 800 1
+   -s 0 800 1  set resolution of display 0 to 800 [x 600] @ 1x [@ 60Hz]
+   -s 0 800    shorthand for -s 0 800 2 (highest scale factor)
+   -s 800      shorthand for -s 0 800 2 (highest scale factor)
    -r 0 800    shorthand for -s 0 800 2
    -r 800      shorthand for -s 0 800 2
+   -d          toggle macOS Dark Mode
 """
 
 func main () {
@@ -325,6 +348,8 @@ func main () {
 
             screens.set(displayIndex:arg2, width:arg3, scale:arg4)
         }
+    case .darkMode:
+        DarkMode.toggle()
     default:
         print(help_msg)
     }

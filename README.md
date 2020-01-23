@@ -41,6 +41,11 @@ Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), R
 ./scres.swift -s 2880
 ```
 
+### Toggle Dark Mode (Code from Sindre Sorhus https://github.com/sindresorhus/dark-mode/)
+```bash
+./scres.swift -d
+```
+
 ### Show quick help
 ```bash
 ./scres.swift -h
