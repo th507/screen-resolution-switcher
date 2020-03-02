@@ -16,25 +16,19 @@ class Screens {
     var maxDisplays:Int = 8
     // actual number of display
     var displayCount:Int = 0
-    
-    //var displayIDs:UnsafeMutablePointer<CGDirectDisplayID>?
     var dm = [DisplayManager]()
     
     init() {
         // actual number of display
         var displayCount32:UInt32 = 0
-        let displayIDsPrealloc = UnsafeMutablePointer<CGDirectDisplayID>.allocate(capacity:maxDisplays)
+        var displayIDs = [CGDirectDisplayID](arrayLiteral: 0)
 
-        guard CGGetOnlineDisplayList(UInt32(maxDisplays), displayIDsPrealloc, &displayCount32) == .success else {
+        guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
             print("Error on getting online display List.")
             return
         }
         displayCount = Int( displayCount32 )
-        
-        for i in 0..<displayCount {
-            let m = DisplayManager(displayIDsPrealloc[i])
-            dm.append( m )
-        }
+        dm = displayIDs.map { DisplayManager($0) }
     }
 
     // print a list of all displays
