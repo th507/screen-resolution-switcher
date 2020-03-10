@@ -19,7 +19,19 @@ Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), R
 ./scres.swift -m
 ```
 
-### Set display resolution for a certain display
+### Set display resolution
+```bash
+// Supported command calls
+//   -s [width]
+//   -s [displayID], [width]
+//   -s [width], [scale]
+//   -s [width], [height]
+//   -s [displayID], [width], [height]
+//   -s [displayID], [width], [scale]
+//   -s [displayID], [width], [height], [scale]
+```
+
+#### Shortcut for a certain display
 ```bash
 # Set resolution of display 0 to 2880 x 1800
 ./scres.swift -s 0 2880
@@ -29,7 +41,7 @@ Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), R
 ./scres.swift -s 2880
 ```
 
-### Set display resolution with a scaling factor
+#### Set a scaling factor
 ```bash
 # Set resolution of display 0 to 2880 x 1800 @ 2x
 ./scres.swift -s 0 2880 2
@@ -37,7 +49,7 @@ Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), R
 # -r behave the same as -s
 ./scres.swift -r 0 2880
 
-# if only one display is attached
+# if only one display is attached, will try higher retina (2x) first
 ./scres.swift -s 2880
 ```
 

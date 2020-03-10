@@ -11,9 +11,65 @@ import Foundation
 import ApplicationServices
 import CoreVideo
 
+// Supported command calls:
+// 1    width                   => 2
+// 2    id, width
+// 3    width, scale            => 6
+// 4    width, height           => 5
+// 5    id, width, height
+// 6    id, width, scale
+// 7    id, width, height, scale
+struct DisplayProperty {
+    var displayIndex = 0, width = 0
+    var height, scale:Int?
+    init(_ arr:[String]) {
+        var args = arr.compactMap({ Int($0) })
+
+        if args[0] > Screens.MAX_DISPLAYS {
+            args.insert(0 /* displayIndex */, at:0)
+        }
+
+        if args.count < 2 { return }
+
+        displayIndex = args[0]
+        width = args[1]
+
+        if args.count == 2 { return }
+
+        if args[2] > DisplayInfo.MAX_SCALE {
+            height = args[2]
+
+            if args.count > 3 {
+                scale = args[3]
+            }
+        }
+        else {
+            scale = args[2]
+            if args.count > 3 {
+                height = args[3]
+            }
+        }
+
+    }
+
+    // override a lesser used operator to performance diplay mode checks concisely
+    static func ~= (lhs: DisplayProperty, rhs: DisplayInfo) -> Bool {
+        var bool = lhs.width == rhs.width
+        
+        if lhs.height != nil {
+            bool = bool && lhs.height == rhs.height
+        }
+        if lhs.scale != nil {
+            bool = bool && lhs.scale == rhs.scale
+        }
+        return bool
+    }
+}
+
 class Screens {
     // assume at most 8 display connected
-    var maxDisplays:Int = 8
+    static let MAX_DISPLAYS = 8
+    var maxDisplays = MAX_DISPLAYS
     // actual number of display
     var displayCount:Int = 0
     var dm = [DisplayManager]()
@@ -34,42 +90,23 @@ class Screens {
     // print a list of all displays
     // used by -l
     func listDisplays() {
-        for (i,m) in dm.enumerated() {
-            print("Display \(i):  \(m.currentInfo.formatter())")
+        for (i, m) in dm.enumerated() {
+            print("Display \(i):\(m.format())")
         }
     }
     
     func listModes(_ displayIndex:Int) -> Void {
-        let cd = dm[displayIndex]
-        let ci = cd.currentInfo
-        cd.displayInfo.forEach { di in print(di.formatter(matchWith:ci)) }
+        dm[displayIndex].printFormatForAllModes()
     }
 
-    func set(displayIndex:Int, width:Int) -> Void {
-        dm[displayIndex].set(width)
-    }
-    func set(displayIndex:Int, width:Int, scale:Int) -> Void {
-        dm[displayIndex].set(width, scale:scale)
-    }
-    func set(width:Int) -> Void {
-        guard displayCount == 1 else {
-            print("Specify display index")
-            return
-        }
-        set(displayIndex:0, width:width)
-    }
-    func set(width:Int, scale:Int) -> Void {
-        guard displayCount == 1 else {
-            print("Specify display index")
-            return
-        }
-        set(displayIndex:0, width:width, scale:scale)
+    func set(props:DisplayProperty) {
+        dm[props.displayIndex].set(props:props)
     }
 }
 
 class DisplayManager {
-    var displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], currentInfo:DisplayInfo, modes:[CGDisplayMode]
-    
+    var displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
+
     init(_ _displayID:CGDirectDisplayID) {
         displayID = _displayID
         var modesArray:[CGDisplayMode]?
@@ -83,13 +120,38 @@ class DisplayManager {
         modes = modesArray!
         displayInfo = modes.map { DisplayInfo(displayID:_displayID, mode:$0) }
 
-        currentInfo = DisplayInfo(_displayID)
+        let mode = CGDisplayCopyDisplayMode(displayID)!
+        modeIndex = modes.firstIndex(of:mode)!
     }
     
-    private func _set(modeIndex:Int) -> Void {
-        guard modeIndex < modes.count else { return }
+    private func _format(_ di:DisplayInfo, leadingString:String) -> String {
+        // We assume that 5 digits are enough to hold dimensions.
+        // 100K monitor users will just have to live with a bit of formatting misalignment.
+        return String(
+            format:"%@%5d x %4d @ %dx @ %dHz",
+            leadingString,
+            di.width,
+            di.height,
+            di.scale,
+            di.frequency
+        )
+    }
+    
+    func format() -> String{
+        return _format(displayInfo[modeIndex], leadingString:"")
+    }
+    
+    func printFormatForAllModes() {
+        for (i, di) in displayInfo.enumerated() {
+            print(_format(di, leadingString:i == modeIndex ? "  --> " : "      "))
+        }
+    }
+    
+    private func _set(_ mi:Int) -> Void {
+        if mi == modeIndex { return }
+        guard mi < modes.count else { return }
         
-        let mode:CGDisplayMode = modes[modeIndex]
+        let mode:CGDisplayMode = modes[mi]
         
         guard mode.isUsableForDesktopGUI() != false else {
             print("This mode is unavailable for current desktop GUI")
@@ -110,52 +172,24 @@ class DisplayManager {
         }
     }
 
-    private func _checkMode(_ width:Int) -> Int? {
-        return displayInfo.firstIndex(where: { $0.width == width })
-    }
-    private func _checkMode(_ width:Int, scale:Int) -> Int? {
-        return displayInfo.firstIndex(where: { $0.width == width && $0.scale == scale })
+    private func _getIndex(props:DisplayProperty) -> Int? {
+        return displayInfo.firstIndex(where: { props ~= $0 })
     }
 
-    func set(_ width:Int) -> Void {
-        guard let modeIndex = _checkMode(width) else {
+    func set(props: DisplayProperty) {
+        if let mi = _getIndex(props: props) {
+            _set(mi)
+        } else {
             print("This mode is unavailable for current desktop GUI")
-            return
         }
-        // the modes are sorted with higher scale factor in front
-        // so we select the higher scale factor (a.k.a retina) mode by default
-        _set(modeIndex:modeIndex)
-    }
-    func set(_ width:Int, scale:Int) -> Void {
-        guard let modeIndex = _checkMode(width, scale:scale) else {
-            print("This mode is unavailable for current desktop GUI")
-            return
-        }
-        print("Setting display mode")
-        _set(modeIndex:modeIndex)
     }
 }
 
 // return width, height and frequency info for corresponding displayID
-struct DisplayInfo: Hashable {
+struct DisplayInfo {
+    static let MAX_SCALE = 10
     var width, height, scale, frequency:Int
-    
-    init() {
-        width = 0
-        height = 0
-        scale = 0
-        frequency = 0
-    }
-    
-    init(_ displayID:CGDirectDisplayID) {
-        if let mode = CGDisplayCopyDisplayMode(displayID) {
-            self.init(displayID:displayID, mode:mode)
-        }
-        else {
-            self.init()
-        }
-    }
-    
+
     init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
         width = mode.width
         height = mode.height
@@ -168,46 +202,14 @@ struct DisplayInfo: Hashable {
             
             let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
             // timeValue is in fact already in Int64
-            let timeValue = time.timeValue as Int64
-            // a hack-y way to do ceil
-            let timeScale = Int64(time.timeScale) + timeValue / 2
+            let timeScale = Int64(time.timeScale) + time.timeValue / 2
             
-            frequency = Int( timeScale / timeValue )
+            frequency = Int( timeScale / time.timeValue )
         }
     }
 
-    func formatter(matchWith:DisplayInfo?) -> String {
-        // We assume that 5 digits are enough to hold dimensions.
-        // 100K monitor users will just have to live with a bit of formatting misalignment.
-        return String(
-            format:" %@ %5d x %4d @ %dx @ %dHz",
-            matchWith == self ? "--> " : "    ",
-            width,
-            height,
-            scale,
-            frequency
-        )
-    }
-    func formatter() -> String {
-        formatter(matchWith:nil)
-    }
-
-    static func == (lhs: DisplayInfo, rhs: DisplayInfo) -> Bool {
-        return lhs.width == rhs.width && lhs.height == rhs.height && lhs.scale == rhs.scale && lhs.frequency == rhs.frequency
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(width)
-        hasher.combine(height)
-        hasher.combine(scale)
-        hasher.combine(frequency)
-    }
-
-    // Hasher is not available in XCode 9 yet. :-(
-    // https://developer.apple.com/documentation/swift/hashable?changes=_9
-    var hashValue: Int {
-        // Overflows a little, but works.
-        return width + 10000 * (height * 10000 * (scale + 10 * frequency))
+    static func ~= (lhs: DisplayInfo, rhs: DisplayProperty) -> Bool {
+        return rhs ~= lhs
     }
 }
 
@@ -268,13 +270,6 @@ struct UserInput {
             intention = Intention.seeHelp
         }
     }
-    
-    func argAsInt(at:Int) -> Int {
-        guard at < count else {
-            return -1
-        }
-        return Int(arguments[at])!
-    }
 }
 
 let help_display_list = "List all available displays by:\n    screen-resolution-switcher -l"
@@ -315,33 +310,10 @@ func main () {
         screens.listModes(displayIndex)
 
     case .setMode:
-        guard input.count > 2 else {
-            print("Specify a display to set its mode. \(help_display_list)")
-            return
-        }
-        // input.count > 2 guarantees arg2 is non-nil
-        let arg2 = input.argAsInt(at:2)
+        screens.set(props:
+            DisplayProperty( input.arguments )
+        )
 
-        switch input.count {
-        case 3:
-            screens.set(width:arg2)
-        case 4:
-            let arg3 = input.argAsInt(at:3)
-            
-            if (arg2 < screens.maxDisplays) {
-                screens.set(displayIndex:arg2, width:arg3 )
-            }
-            else {
-                screens.set(width:arg2, scale:arg3)
-            }
-        /*case 5:
-            fallthrough*/
-        default:
-            let arg3 = input.argAsInt(at:3)
-            let arg4 = input.argAsInt(at:4)
-
-            screens.set(displayIndex:arg2, width:arg3, scale:arg4)
-        }
     case .darkMode:
         DarkMode.toggle()
     default:
