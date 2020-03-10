@@ -12,100 +12,6 @@ import ApplicationServices
 import CoreVideo
 import OSAKit
 
-
-// Supported command calls:
-// 1    width                   => 2
-// 2    id, width
-// 3    width, scale            => 6
-// 4    width, height           => 5
-// 5    id, width, height
-// 6    id, width, scale
-// 7    id, width, height, scale
-struct DisplayProperty {
-    var displayIndex = 0, width = 0
-    var height, scale:Int?
-    init(_ arr:[String]) {
-        var args = arr.compactMap({ Int($0) })
-
-        if args[0] > Screens.MAX_DISPLAYS {
-            args.insert(0 /* displayIndex */, at:0)
-        }
-
-        if args.count < 2 { return }
-
-        displayIndex = args[0]
-        width = args[1]
-
-        if args.count == 2 { return }
-
-        if args[2] > DisplayInfo.MAX_SCALE {
-            height = args[2]
-
-            if args.count > 3 {
-                scale = args[3]
-            }
-        }
-        else {
-            scale = args[2]
-            if args.count > 3 {
-                height = args[3]
-            }
-        }
-
-    }
-
-    // override a lesser used operator to performance diplay mode checks concisely
-    static func ~= (lhs: DisplayProperty, rhs: DisplayInfo) -> Bool {
-        var bool = lhs.width == rhs.width
-        
-        if lhs.height != nil {
-            bool = bool && lhs.height == rhs.height
-        }
-        if lhs.scale != nil {
-            bool = bool && lhs.scale == rhs.scale
-        }
-        return bool
-    }
-}
-
-class Screens {
-    // assume at most 8 display connected
-    static let MAX_DISPLAYS = 8
-    var maxDisplays = MAX_DISPLAYS
-    // actual number of display
-    var displayCount:Int = 0
-    var dm = [DisplayManager]()
-    
-    init() {
-        // actual number of display
-        var displayCount32:UInt32 = 0
-        var displayIDs = [CGDirectDisplayID](arrayLiteral: 0)
-
-        guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
-            print("Error on getting online display List.")
-            return
-        }
-        displayCount = Int( displayCount32 )
-        dm = displayIDs.map { DisplayManager($0) }
-    }
-
-    // print a list of all displays
-    // used by -l
-    func listDisplays() {
-        for (i, m) in dm.enumerated() {
-           m.printForOneDisplay("Display \(i):")
-        }
-    }
-    
-    func listModes(_ displayIndex:Int) {
-        dm[displayIndex].printFormatForAllModes()
-    }
-
-    func set(props:DisplayProperty) {
-        dm[props.displayIndex].set(props:props)
-    }
-}
-
 class DisplayManager {
     var displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
 
@@ -140,7 +46,7 @@ class DisplayManager {
     }
     
     func printForOneDisplay(_ leadingString:String) {
-        print(_format(displayInfo[modeIndex], leadingString:""))
+        print(_format(displayInfo[modeIndex], leadingString:leadingString))
     }
     
     func printFormatForAllModes() {
@@ -174,8 +80,8 @@ class DisplayManager {
         }
     }
 
-    func set(props: DisplayProperty) {
-        if let mi = displayInfo.firstIndex(where: { props ~= $0 }) {
+    func set(with setting: DisplayUserSetting) {
+        if let mi = displayInfo.firstIndex(where: { setting ~= $0 }) {
             _set(mi)
         } else {
             print("This mode is unavailable for current desktop GUI")
@@ -206,8 +112,100 @@ struct DisplayInfo {
         }
     }
 
-    static func ~= (lhs: DisplayInfo, rhs: DisplayProperty) -> Bool {
+    static func ~= (lhs: DisplayInfo, rhs: DisplayUserSetting) -> Bool {
         return rhs ~= lhs
+    }
+}
+
+// Supported command calls:
+// 1    width                   => 2
+// 2    id, width
+// 3    width, scale            => 6
+// 4    width, height           => 5
+// 5    id, width, height
+// 6    id, width, scale
+// 7    id, width, height, scale
+struct DisplayUserSetting {
+    var displayIndex = 0, width = 0
+    var height, scale:Int?
+    init(_ arr:[String]) {
+        var args = arr.compactMap({ Int($0) })
+
+        if args[0] > Screens.MAX_DISPLAYS {
+            args.insert(0 /* displayIndex */, at:0)
+        }
+
+        if args.count < 2 { return }
+
+        displayIndex = args[0]
+        width = args[1]
+
+        if args.count == 2 { return }
+
+        if args[2] > DisplayInfo.MAX_SCALE {
+            height = args[2]
+
+            if args.count > 3 {
+                scale = args[3]
+            }
+        }
+        else {
+            scale = args[2]
+            if args.count > 3 {
+                height = args[3]
+            }
+        }
+
+    }
+
+    // override a lesser used operator to performance diplay mode checks concisely
+    static func ~= (lhs: DisplayUserSetting, rhs: DisplayInfo) -> Bool {
+        var bool = lhs.width == rhs.width
+
+        if lhs.height != nil {
+            bool = bool && lhs.height == rhs.height
+        }
+        if lhs.scale != nil {
+            bool = bool && lhs.scale == rhs.scale
+        }
+        return bool
+    }
+}
+class Screens {
+    // assume at most 8 display connected
+    static let MAX_DISPLAYS = 8
+    var maxDisplays = MAX_DISPLAYS
+    // actual number of display
+    var displayCount:Int = 0
+    var dm = [DisplayManager]()
+    
+    init() {
+        // actual number of display
+        var displayCount32:UInt32 = 0
+        var displayIDs = [CGDirectDisplayID](arrayLiteral: 0)
+
+        guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
+            print("Error on getting online display List.")
+            return
+        }
+        displayCount = Int( displayCount32 )
+        dm = displayIDs.map { DisplayManager($0) }
+    }
+
+    // print a list of all displays
+    // used by -l
+    func listDisplays() {
+        for (i, m) in dm.enumerated() {
+           m.printForOneDisplay("Display \(i):")
+        }
+    }
+
+    func listModes(_ displayIndex:Int) {
+        dm[displayIndex].printFormatForAllModes()
+    }
+
+    func set(with setting:DisplayUserSetting) {
+        dm[setting.displayIndex].set(with:setting)
     }
 }
 
@@ -314,7 +312,7 @@ func main () {
         screens.listModes(displayIndex)
 
     case .setMode:
-        screens.set(props:DisplayProperty( input.arguments ))
+        screens.set(with:DisplayUserSetting( input.arguments ))
 
     case .darkMode:
         darkMode.toggle()
