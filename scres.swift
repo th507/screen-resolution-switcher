@@ -10,6 +10,8 @@
 import Foundation
 import ApplicationServices
 import CoreVideo
+import OSAKit
+
 
 // Supported command calls:
 // 1    width                   => 2
@@ -91,11 +93,11 @@ class Screens {
     // used by -l
     func listDisplays() {
         for (i, m) in dm.enumerated() {
-            print("Display \(i):\(m.format())")
+           m.printForOneDisplay("Display \(i):")
         }
     }
     
-    func listModes(_ displayIndex:Int) -> Void {
+    func listModes(_ displayIndex:Int) {
         dm[displayIndex].printFormatForAllModes()
     }
 
@@ -137,8 +139,8 @@ class DisplayManager {
         )
     }
     
-    func format() -> String{
-        return _format(displayInfo[modeIndex], leadingString:"")
+    func printForOneDisplay(_ leadingString:String) {
+        print(_format(displayInfo[modeIndex], leadingString:""))
     }
     
     func printFormatForAllModes() {
@@ -172,12 +174,8 @@ class DisplayManager {
         }
     }
 
-    private func _getIndex(props:DisplayProperty) -> Int? {
-        return displayInfo.firstIndex(where: { props ~= $0 })
-    }
-
     func set(props: DisplayProperty) {
-        if let mi = _getIndex(props: props) {
+        if let mi = displayInfo.firstIndex(where: { props ~= $0 }) {
             _set(mi)
         } else {
             print("This mode is unavailable for current desktop GUI")
@@ -213,23 +211,27 @@ struct DisplayInfo {
     }
 }
 
-// from Sindre Sorhus
-// https://github.com/sindresorhus/dark-mode/blob/master/Sources/DarkMode.swift
+// darkMode toggle code with JXA ;-)
+// Method from Stackoverflow User: bacongravy
+// https://stackoverflow.com/questions/44209057/how-can-i-run-jxa-from-swift
 struct DarkMode {
-    private static let prefix = "tell application \"System Events\" to tell appearance preferences to"
+    static let scriptString = """
+    pref = Application(\"System Events\").appearancePreferences
+    pref.darkMode = !pref.darkMode()
+"""
+    let script = OSAScript.init(source: scriptString, language: OSALanguage.init(forName: "JavaScript"))
+    
+    init() {
+        var compileError: NSDictionary?
 
-    static var isEnabled: Bool {
-        get {
-            UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
-        }
-        set {
-            toggle(force: newValue)
-        }
+        script.compileAndReturnError(&compileError)
     }
+    func toggle() {
+        var scriptError: NSDictionary?
 
-    static func toggle(force: Bool? = nil) {
-        let value = force.map(String.init) ?? "not dark mode"
-        NSAppleScript(source: "\(prefix) set dark mode to \(value)")?.executeAndReturnError(nil)
+        if let result = script.executeAndReturnError(&scriptError)?.stringValue {
+            print("Dark Mode:", result)
+        }
     }
 }
 
@@ -293,6 +295,8 @@ Here are some examples:
 
 func main () {
     let screens = Screens()
+    let darkMode = DarkMode()
+
     let input = UserInput(CommandLine.arguments)
     
     // dipatch functions
@@ -310,12 +314,10 @@ func main () {
         screens.listModes(displayIndex)
 
     case .setMode:
-        screens.set(props:
-            DisplayProperty( input.arguments )
-        )
+        screens.set(props:DisplayProperty( input.arguments ))
 
     case .darkMode:
-        DarkMode.toggle()
+        darkMode.toggle()
     default:
         print(help_msg)
     }
