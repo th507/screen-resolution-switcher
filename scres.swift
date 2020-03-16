@@ -11,6 +11,7 @@ import Foundation
 import ApplicationServices
 import CoreVideo
 import OSAKit
+import IOKit
 
 class DisplayManager {
     var displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
@@ -239,6 +240,7 @@ struct UserInput {
         case listModes(Int)
         case setMode
         case darkMode
+        case sleepDisplay
         case seeHelp
     }
     
@@ -266,10 +268,19 @@ struct UserInput {
             intention = Intention.setMode
         case "-d", "--toggle-dark-mode":
             intention = Intention.darkMode
+        case "-sl", "--sleep", "sleep":
+            intention = Intention.sleepDisplay
         default:
             intention = Intention.seeHelp
         }
     }
+}
+
+func sleepDisplay() {
+    let r = IORegistryEntryFromPath(kIOMasterPortDefault, strdup("IOService:/IOResources/IODisplayWrangler"))
+
+    IORegistryEntrySetCFProperty(r, ("IORequestIdle" as CFString), kCFBooleanTrue)
+    IOObjectRelease(r)
 }
 
 let help_display_list = "List all available displays by:\n    screen-resolution-switcher -l"
@@ -289,6 +300,7 @@ Here are some examples:
    -r 0 800    shorthand for -s 0 800 2
    -r 800      shorthand for -s 0 800 2
    -d          toggle macOS Dark Mode
+   -sl         sleep display
 """
 
 func main () {
@@ -316,6 +328,8 @@ func main () {
 
     case .darkMode:
         darkMode.toggle()
+    case .sleepDisplay:
+        sleepDisplay()
     default:
         print(help_msg)
     }
