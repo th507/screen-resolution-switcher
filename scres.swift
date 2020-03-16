@@ -20,16 +20,17 @@ class DisplayManager {
         displayID = _displayID
         var modesArray:[CGDisplayMode]?
 
-        if let modeList = CGDisplayCopyAllDisplayModes(displayID, [kCGDisplayShowDuplicateLowResolutionModes:1] as CFDictionary) {
-            // https://github.com/FUKUZAWA-Tadashi/FHCCommander
-            modesArray = (modeList as Array).map { unsafeBitCast($0, to:CGDisplayMode.self) }
+        if let modeList = CGDisplayCopyAllDisplayModes(displayID, [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary) {
+            modesArray = (modeList as! Array).filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
         } else {
             print("Unable to get display modes")
         }
         modes = modesArray!
         displayInfo = modes.map { DisplayInfo(displayID:_displayID, mode:$0) }
+    
 
         let mode = CGDisplayCopyDisplayMode(displayID)!
+        
         modeIndex = modes.firstIndex(of:mode)!
     }
     
@@ -56,16 +57,9 @@ class DisplayManager {
         }
     }
     
-    private func _set(_ mi:Int) -> Void {
-        if mi == modeIndex { return }
-        guard mi < modes.count else { return }
-        
+    private func _set(_ mi:Int) {
         let mode:CGDisplayMode = modes[mi]
-        
-        guard mode.isUsableForDesktopGUI() != false else {
-            print("This mode is unavailable for current desktop GUI")
-            return
-        }
+
         print("Setting display mode")
 
         var config:CGDisplayConfigRef?
@@ -83,9 +77,11 @@ class DisplayManager {
 
     func set(with setting: DisplayUserSetting) {
         if let mi = displayInfo.firstIndex(where: { setting ~= $0 }) {
-            _set(mi)
+            if mi != modeIndex {
+                _set(mi)
+            }
         } else {
-            print("This mode is unavailable for current desktop GUI")
+            print("This mode is unavailable")
         }
     }
 }
@@ -131,7 +127,9 @@ struct DisplayUserSetting {
     var height, scale:Int?
     init(_ arr:[String]) {
         var args = arr.compactMap({ Int($0) })
-
+        
+        if args.count < 1 { return }
+        
         if args[0] > Screens.MAX_DISPLAYS {
             args.insert(0 /* displayIndex */, at:0)
         }
@@ -156,7 +154,6 @@ struct DisplayUserSetting {
                 height = args[3]
             }
         }
-
     }
 
     // override a lesser used operator to performance diplay mode checks concisely
@@ -325,7 +322,6 @@ func main () {
 
     case .setMode:
         screens.set(with:DisplayUserSetting( input.arguments ))
-
     case .darkMode:
         darkMode.toggle()
     case .sleepDisplay:
