@@ -14,7 +14,7 @@ import OSAKit
 import IOKit
 
 class DisplayManager {
-    var displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
+    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
 
     init(_ _displayID:CGDirectDisplayID) {
         displayID = _displayID
@@ -27,7 +27,6 @@ class DisplayManager {
         }
         modes = modesArray!
         displayInfo = modes.map { DisplayInfo(displayID:_displayID, mode:$0) }
-    
 
         let mode = CGDisplayCopyDisplayMode(displayID)!
         
@@ -38,7 +37,7 @@ class DisplayManager {
         // We assume that 5 digits are enough to hold dimensions.
         // 100K monitor users will just have to live with a bit of formatting misalignment.
         return String(
-            format:"%@%5d x %4d @ %dx @ %dHz",
+            format:"  %@ %5d x %4d @ %dx @ %dHz",
             leadingString,
             di.width, di.height,
             di.scale, di.frequency
@@ -50,8 +49,10 @@ class DisplayManager {
     }
     
     func printFormatForAllModes() {
-        for (i, di) in displayInfo.enumerated() {
-            print(_format(di, leadingString:i == modeIndex ? "  --> " : "      "))
+        var i = 0
+        displayInfo.forEach { di in
+            print(_format(di, leadingString:i == modeIndex ? "-->" : "   "))
+            i += 1
         }
     }
     
@@ -99,7 +100,7 @@ struct DisplayInfo {
             var link:CVDisplayLink?
             CVDisplayLinkCreateWithCGDisplay(displayID, &link)
             
-            let time:CVTime = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+            let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
             // timeValue is in fact already in Int64
             let timeScale = Int64(time.timeScale) + time.timeValue / 2
             
@@ -167,6 +168,7 @@ struct DisplayUserSetting {
         return bool
     }
 }
+
 class Screens {
     // assume at most 8 display connected
     static let MAX_DISPLAYS = 8
@@ -275,13 +277,12 @@ func main () {
         if count > 2, let index = Int(arguments[2]) {
             displayIndex = index
         }
-        guard displayIndex < screens.displayCount else {
-            print("Display index( \(displayIndex) ) not found. List all available displays by:\n    screen-resolution-switcher -l")
-            return
+        if displayIndex < screens.displayCount {
+            print("Supported Modes for Display \(displayIndex):")
+            screens.listModes(displayIndex)
+        } else {
+            print("Display index not found. List all available displays by:\n    screen-resolution-switcher -l")
         }
-        
-        print("Supported Modes for Display \(displayIndex):")
-        screens.listModes(displayIndex)
     case "-s", "--set", "set", "-r", "--set-retina", "retina":
         screens.set(with:DisplayUserSetting( arguments ))
     case "-d", "--toggle-dark-mode":
