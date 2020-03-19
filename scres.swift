@@ -40,10 +40,8 @@ class DisplayManager {
         return String(
             format:"%@%5d x %4d @ %dx @ %dHz",
             leadingString,
-            di.width,
-            di.height,
-            di.scale,
-            di.frequency
+            di.width, di.height,
+            di.scale, di.frequency
         )
     }
     
@@ -109,7 +107,7 @@ struct DisplayInfo {
         }
     }
 
-    static func ~= (lhs: DisplayInfo, rhs: DisplayUserSetting) -> Bool {
+    static func ~= (lhs: Self, rhs: DisplayUserSetting) -> Bool {
         return rhs ~= lhs
     }
 }
@@ -126,7 +124,7 @@ struct DisplayUserSetting {
     var displayIndex = 0, width = 0
     var height, scale:Int?
     init(_ arr:[String]) {
-        var args = arr.compactMap({ Int($0) })
+        var args = arr.compactMap { Int($0) }
         
         if args.count < 1 { return }
         
@@ -157,7 +155,7 @@ struct DisplayUserSetting {
     }
 
     // override a lesser used operator to performance diplay mode checks concisely
-    static func ~= (lhs: DisplayUserSetting, rhs: DisplayInfo) -> Bool {
+    static func ~= (lhs: Self, rhs: DisplayInfo) -> Bool {
         var bool = lhs.width == rhs.width
 
         if lhs.height != nil {
@@ -231,48 +229,6 @@ struct DarkMode {
     }
 }
 
-struct UserInput {
-    enum Intention {
-        case listDisplays
-        case listModes(Int)
-        case setMode
-        case darkMode
-        case sleepDisplay
-        case seeHelp
-    }
-    
-    var intention:Intention
-    var arguments:[String]
-    var count:Int
-    
-    init(_ args:[String]) {
-        arguments = args
-        count = arguments.count
-        guard count >= 2 else {
-            intention = Intention.seeHelp
-            return
-        }
-        switch arguments[1] {
-        case "-l", "--list", "list":
-            intention = Intention.listDisplays
-        case "-m", "--mode", "mode":
-            var index = 0
-            if count > 2, let displayIndex = Int(arguments[2]) {
-                index = displayIndex
-            }
-            intention = Intention.listModes(index)
-        case "-s", "--set", "set", "-r", "--set-retina", "retina":
-            intention = Intention.setMode
-        case "-d", "--toggle-dark-mode":
-            intention = Intention.darkMode
-        case "-sl", "--sleep", "sleep":
-            intention = Intention.sleepDisplay
-        default:
-            intention = Intention.seeHelp
-        }
-    }
-}
-
 func sleepDisplay() {
     let r = IORegistryEntryFromPath(kIOMasterPortDefault, strdup("IOService:/IOResources/IODisplayWrangler"))
 
@@ -280,8 +236,8 @@ func sleepDisplay() {
     IOObjectRelease(r)
 }
 
-let help_display_list = "List all available displays by:\n    screen-resolution-switcher -l"
-let help_msg = """
+func seeHelp() {
+print("""
 Usage:
 screen-resolution-switcher [-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex]
 [-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width],
@@ -298,36 +254,42 @@ Here are some examples:
    -r 800      shorthand for -s 0 800 2
    -d          toggle macOS Dark Mode
    -sl         sleep display
-"""
+""")
+}
 
 func main () {
     let screens = Screens()
     let darkMode = DarkMode()
 
-    let input = UserInput(CommandLine.arguments)
-    
-    // dipatch functions
-    switch input.intention {
-    case .listDisplays:
+    let arguments = CommandLine.arguments
+    let count = arguments.count
+    guard count >= 2 else {
+        seeHelp()
+        return
+    }
+    switch arguments[1] {
+    case "-l", "--list", "list":
         screens.listDisplays()
-        
-    case let .listModes(displayIndex):
+    case "-m", "--mode", "mode":
+        var displayIndex = 0
+        if count > 2, let index = Int(arguments[2]) {
+            displayIndex = index
+        }
         guard displayIndex < screens.displayCount else {
-            print("Display index( \(displayIndex) ) not found. \(help_display_list)")
+            print("Display index( \(displayIndex) ) not found. List all available displays by:\n    screen-resolution-switcher -l")
             return
         }
         
         print("Supported Modes for Display \(displayIndex):")
         screens.listModes(displayIndex)
-
-    case .setMode:
-        screens.set(with:DisplayUserSetting( input.arguments ))
-    case .darkMode:
+    case "-s", "--set", "set", "-r", "--set-retina", "retina":
+        screens.set(with:DisplayUserSetting( arguments ))
+    case "-d", "--toggle-dark-mode":
         darkMode.toggle()
-    case .sleepDisplay:
+    case "-sl", "--sleep", "sleep":
         sleepDisplay()
     default:
-        print(help_msg)
+        seeHelp()
     }
 }
 
