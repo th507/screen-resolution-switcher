@@ -155,7 +155,7 @@ struct DisplayUserSetting {
         }
     }
 
-    // override a lesser used operator to performance diplay mode checks concisely
+    // override a lesser-used operator to simplify diplay mode checks
     static func ~= (lhs: Self, rhs: DisplayInfo) -> Bool {
         var bool = lhs.width == rhs.width
 
@@ -261,7 +261,6 @@ Here are some examples:
 
 func main () {
     let screens = Screens()
-    let darkMode = DarkMode()
 
     let arguments = CommandLine.arguments
     let count = arguments.count
@@ -286,7 +285,7 @@ func main () {
     case "-s", "--set", "set", "-r", "--set-retina", "retina":
         screens.set(with:DisplayUserSetting( arguments ))
     case "-d", "--toggle-dark-mode":
-        darkMode.toggle()
+        DarkMode().toggle()
     case "-sl", "--sleep", "sleep":
         sleepDisplay()
     default:
