@@ -245,17 +245,19 @@ screen-resolution-switcher [-h|--help] [-l|--list|list] [-m|--mode|mode displayI
 [-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width],
 
 Here are some examples:
-   -h          get help
-   -l          list displays
-   -m 0        list all mode from a certain display
-   -m          shorthand for -m 0
-   -s 0 800 1  set resolution of display 0 to 800 [x 600] @ 1x [@ 60Hz]
-   -s 0 800    shorthand for -s 0 800 2 (highest scale factor)
-   -s 800      shorthand for -s 0 800 2 (highest scale factor)
-   -r 0 800    shorthand for -s 0 800 2
-   -r 800      shorthand for -s 0 800 2
-   -d          toggle macOS Dark Mode
-   -sl         sleep display
+   -h               get help
+   -l               list displays
+   -m 0             list all mode from a certain display
+   -m               shorthand for -m 0
+   -s 0 800 600 1   set resolution of display 0 to 800 x 600 @ 1x [@ 60Hz]
+   -s 0 800 600     set resolution of display 0 to 800 x 600 @(highest scale factor)
+   -s 0 800 1       set resolution of display 0 to 800 [x 600] @ 1x [@ 60Hz]
+   -s 0 800         shorthand for -s 0 800 2 (highest scale factor)
+   -s 800           shorthand for -s 0 800 2 (highest scale factor)
+   -r 0 800         shorthand for -s 0 800 2
+   -r 800           shorthand for -s 0 800 2
+   -d               toggle macOS Dark Mode
+   -sl              sleep display
 """)
 }
 
