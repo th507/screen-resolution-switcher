@@ -33,25 +33,27 @@ class DisplayManager {
         modeIndex = modes.firstIndex(of:mode)!
     }
     
-    private func _format(_ di:DisplayInfo, leadingString:String) -> String {
+    private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
         // We assume that 5 digits are enough to hold dimensions.
         // 100K monitor users will just have to live with a bit of formatting misalignment.
         return String(
-            format:"  %@ %5d x %4d @ %dx @ %dHz",
+            format:"  %@ %5d x %4d @ %dx @ %dHz%@",
             leadingString,
             di.width, di.height,
-            di.scale, di.frequency
+            di.scale, di.frequency,
+            trailingString
         )
     }
     
     func printForOneDisplay(_ leadingString:String) {
-        print(_format(displayInfo[modeIndex], leadingString:leadingString))
+        print(_format(displayInfo[modeIndex], leadingString:leadingString, trailingString:""))
     }
     
     func printFormatForAllModes() {
         var i = 0
         displayInfo.forEach { di in
-            print(_format(di, leadingString:i == modeIndex ? "-->" : "   "))
+            let bool = i == modeIndex
+            print(_format(di, leadingString: bool ? "\u{001B}[0;33m⮕" : " ", trailingString: bool ? "\u{001B}[0;49m" : ""))
             i += 1
         }
     }
@@ -142,16 +144,11 @@ struct DisplayUserSetting {
 
         if args[2] > DisplayInfo.MAX_SCALE {
             height = args[2]
-
-            if args.count > 3 {
-                scale = args[3]
-            }
+            if args.count > 3 { scale = args[3] }
         }
         else {
             scale = args[2]
-            if args.count > 3 {
-                height = args[3]
-            }
+            if args.count > 3 { height = args[3] }
         }
     }
 
@@ -209,7 +206,7 @@ class Screens {
 
 // darkMode toggle code with JXA ;-)
 // Method from Stackoverflow User: bacongravy
-// https://stackoverflow.com/questions/44209057/how-can-i-run-jxa-from-swift
+// https://stackoverflow.com/questions/44209057
 struct DarkMode {
     static let scriptString = """
     pref = Application(\"System Events\").appearancePreferences
