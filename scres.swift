@@ -70,17 +70,13 @@ class DisplayManager {
             CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
                         
             let afterCheck = CGCompleteDisplayConfiguration(config, CGConfigureOption.permanently)
-            if afterCheck != .success {
-                CGCancelDisplayConfiguration(config)
-            }
+            if afterCheck != .success { CGCancelDisplayConfiguration(config) }
         }
     }
 
     func set(with setting: DisplayUserSetting) {
         if let mi = displayInfo.firstIndex(where: { setting ~= $0 }) {
-            if mi != modeIndex {
-                _set(mi)
-            }
+            if mi != modeIndex { _set(mi) }
         } else {
             print("This mode is unavailable")
         }
@@ -131,9 +127,7 @@ struct DisplayUserSetting {
         
         if args.count < 1 { return }
         
-        if args[0] > Screens.MAX_DISPLAYS {
-            args.insert(0 /* displayIndex */, at:0)
-        }
+        if args[0] > Screens.MAX_DISPLAYS { args.insert(0 /* displayIndex */, at:0) }
 
         if args.count < 2 { return }
 
@@ -156,12 +150,8 @@ struct DisplayUserSetting {
     static func ~= (lhs: Self, rhs: DisplayInfo) -> Bool {
         var bool = lhs.width == rhs.width
 
-        if lhs.height != nil {
-            bool = bool && lhs.height == rhs.height
-        }
-        if lhs.scale != nil {
-            bool = bool && lhs.scale == rhs.scale
-        }
+        if lhs.height != nil { bool = bool && lhs.height == rhs.height }
+        if lhs.scale != nil { bool = bool && lhs.scale == rhs.scale }
         return bool
     }
 }
@@ -222,9 +212,7 @@ struct DarkMode {
     func toggle() {
         var scriptError: NSDictionary?
 
-        if let result = script.executeAndReturnError(&scriptError)?.stringValue {
-            print("Dark Mode:", result)
-        }
+        if let result = script.executeAndReturnError(&scriptError)?.stringValue { print("Dark Mode:", result) }
     }
 }
 
@@ -258,7 +246,7 @@ Here are some examples:
 """)
 }
 
-func main () {
+func main() {
     let screens = Screens()
 
     let arguments = CommandLine.arguments
