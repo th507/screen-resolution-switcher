@@ -21,14 +21,14 @@ Tested with Swift 5.1.3, Xcode 11.3.1 (11C504), OS X Catalina 10.15.2 (19C57), R
 
 ### Set display resolution
 ```bash
-// Supported command calls
-//   -s [width]
-//   -s [displayID], [width]
-//   -s [width], [scale]
-//   -s [width], [height]
-//   -s [displayID], [width], [height]
-//   -s [displayID], [width], [scale]
-//   -s [displayID], [width], [height], [scale]
+# Supported command calls
+#   -s [width]
+#   -s [displayID], [width]
+#   -s [width], [scale]
+#   -s [width], [height]
+#   -s [displayID], [width], [height]
+#   -s [displayID], [width], [scale]
+#   -s [displayID], [width], [height], [scale]
 ```
 
 #### Shortcut for a certain display
