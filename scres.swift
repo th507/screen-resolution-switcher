@@ -115,7 +115,7 @@ struct DisplayInfo {
 // 1    width                   => 2
 // 2    id, width
 // 3    width, scale            => 6
-// 4    width, height           => 5
+// 4    width, height           => 
 // 5    id, width, height
 // 6    id, width, scale
 // 7    id, width, height, scale
@@ -167,14 +167,16 @@ class Screens {
     init() {
         // actual number of display
         var displayCount32:UInt32 = 0
-        var displayIDs = [CGDirectDisplayID](arrayLiteral: 0)
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count:maxDisplays)
 
         guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
             print("Error on getting online display List.")
             return
         }
         displayCount = Int( displayCount32 )
-        dm = displayIDs.map { DisplayManager($0) }
+        dm = displayIDs
+            .filter { $0 != 0 }
+            .map { DisplayManager($0) }
     }
 
     // print a list of all displays
@@ -217,7 +219,7 @@ struct DarkMode {
 }
 
 func sleepDisplay() {
-    let r = IORegistryEntryFromPath(kIOMasterPortDefault, strdup("IOService:/IOResources/IODisplayWrangler"))
+    let r = IORegistryEntryFromPath(kIOMainPortDefault, strdup("IOService:/IOResources/IODisplayWrangler"))
 
     IORegistryEntrySetCFProperty(r, ("IORequestIdle" as CFString), kCFBooleanTrue)
     IOObjectRelease(r)
