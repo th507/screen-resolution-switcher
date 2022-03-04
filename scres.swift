@@ -14,7 +14,7 @@ import OSAKit
 import IOKit
 
 class DisplayManager {
-    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode]
+    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo]
     let modeID:Int32
 
     init(_ displayID:CGDirectDisplayID) {
@@ -22,17 +22,17 @@ class DisplayManager {
         
         let mode = CGDisplayCopyDisplayMode(displayID)!
         self.modeID = mode.ioDisplayModeID
-
         
         var option:CFDictionary?
-        let subList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
-            .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
+        let subList = CGDisplayCopyAllDisplayModes(displayID, option)
         
         option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
-        let modeList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
-            .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
-                
-        self.modes = modeList.filter { !subList.contains($0) }
+        // modes:[CGDisplayMode]
+        let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
+            .filter {
+                !(subList as! Array).contains($0) &&
+                $0.isUsableForDesktopGUI()
+            }
 
         // Array.unique is requires converting to DisplayInfo first
         self.displayInfo = Array(Set(
@@ -66,6 +66,7 @@ class DisplayManager {
     
     private func _set(_ di:DisplayInfo) {
         let mode:CGDisplayMode = di.modeRef
+        print(mode.width, mode.pixelWidth, di.scale, di.width, mode)
 
         print("Setting display mode")
 
@@ -81,6 +82,7 @@ class DisplayManager {
     }
 
     func set(with setting: DisplayUserSetting) {
+        print("setting", setting)
         if let di = displayInfo.first(where: { setting == $0 }) {
             if di.modeID != modeID { _set(di) }
         } else {
