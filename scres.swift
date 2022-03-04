@@ -23,6 +23,7 @@ class DisplayManager {
         let mode = CGDisplayCopyDisplayMode(displayID)!
         self.modeID = mode.ioDisplayModeID
         
+        /*
         var option:CFDictionary?
         let subList = CGDisplayCopyAllDisplayModes(displayID, option)
         
@@ -33,11 +34,17 @@ class DisplayManager {
                 !(subList as! Array).contains($0) &&
                 $0.isUsableForDesktopGUI()
             }
+        */
+        let option:CFDictionary? = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
+        let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
+            .filter { $0.isUsableForDesktopGUI() }
+        self.displayInfo = modes.map { DisplayInfo(displayID: displayID, mode: $0) }
 
         // Array.unique is requires converting to DisplayInfo first
-        self.displayInfo = Array(Set(
+        /*self.displayInfo = Array(Set(
             modes.map { DisplayInfo(displayID:displayID, mode:$0) }
         )).sorted()
+        */
     }
     
     private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
@@ -54,7 +61,10 @@ class DisplayManager {
     
     func printForOneDisplay(_ leadingString:String) {
         let di = displayInfo.filter { $0.modeID == modeID }
-        print(_format(di[0], leadingString:leadingString, trailingString:""))
+        print(displayInfo.count
+              , di[0].modeRef.ioDisplayModeID, di[0].modeRef.ioFlags
+              , di[1].modeRef.ioDisplayModeID, di[1].modeRef.ioFlags)
+        //print(_format(di[0], leadingString:leadingString, trailingString:""))
     }
     
     func printFormatForAllModes() {
