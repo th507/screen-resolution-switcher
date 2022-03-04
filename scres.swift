@@ -14,23 +14,30 @@ import OSAKit
 import IOKit
 
 class DisplayManager {
-    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode], modeIndex:Int
+    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo], modes:[CGDisplayMode]
+    let modeID:Int32
 
-    init(_ _displayID:CGDirectDisplayID) {
-        displayID = _displayID
-        var modesArray:[CGDisplayMode]?
-
-        if let modeList = CGDisplayCopyAllDisplayModes(displayID, [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary) {
-            modesArray = (modeList as! Array).filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
-        } else {
-            print("Unable to get display modes")
-        }
-        modes = modesArray!
-        displayInfo = modes.map { DisplayInfo(displayID:_displayID, mode:$0) }
-
-        let mode = CGDisplayCopyDisplayMode(displayID)!
+    init(_ displayID:CGDirectDisplayID) {
+        self.displayID = displayID
         
-        modeIndex = modes.firstIndex(of:mode)!
+        let mode = CGDisplayCopyDisplayMode(displayID)!
+        self.modeID = mode.ioDisplayModeID
+
+        
+        var option:CFDictionary?
+        let subList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
+            .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
+        
+        
+        option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
+        let modeList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
+            .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
+                
+
+        self.modes = modeList.filter { !subList.contains($0) }
+        self.displayInfo = Array(Set(
+            modes.map { DisplayInfo(displayID:displayID, mode:$0) }
+        )).sorted()
     }
     
     private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
@@ -46,20 +53,19 @@ class DisplayManager {
     }
     
     func printForOneDisplay(_ leadingString:String) {
-        print(_format(displayInfo[modeIndex], leadingString:leadingString, trailingString:""))
+        let di = displayInfo.filter { $0.modeID == modeID }
+        print(_format(di[0], leadingString:leadingString, trailingString:""))
     }
     
     func printFormatForAllModes() {
-        var i = 0
         displayInfo.forEach { di in
-            let bool = i == modeIndex
-            print(_format(di, leadingString: bool ? "\u{001B}[0;33m⮕" : " ", trailingString: bool ? "\u{001B}[0;49m" : ""))
-            i += 1
+            let b = di.modeID == modeID
+            print(_format(di, leadingString: b ? "\u{001B}[0;33m⮕" : " ", trailingString: b ? "\u{001B}[0;49m" : ""))
         }
     }
     
-    private func _set(_ mi:Int) {
-        let mode:CGDisplayMode = modes[mi]
+    private func _set(_ di:DisplayInfo) {
+        let mode:CGDisplayMode = di.modeRef
 
         print("Setting display mode")
 
@@ -75,8 +81,8 @@ class DisplayManager {
     }
 
     func set(with setting: DisplayUserSetting) {
-        if let mi = displayInfo.firstIndex(where: { setting ~= $0 }) {
-            if mi != modeIndex { _set(mi) }
+        if let di = displayInfo.first(where: { setting == $0 }) {
+            if di.modeID != modeID { _set(di) }
         } else {
             print("This mode is unavailable")
         }
@@ -84,14 +90,21 @@ class DisplayManager {
 }
 
 // return width, height and frequency info for corresponding displayID
-struct DisplayInfo {
+struct DisplayInfo:Hashable & Comparable & Equatable {
     static let MAX_SCALE = 10
     var width, height, scale, frequency:Int
+    var modeID:Int32
+    var modeRef:CGDisplayMode
+    //var colorDepth, resolution:Int
 
     init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
         width = mode.width
         height = mode.height
-        scale = mode.pixelWidth / mode.width;
+        scale = mode.pixelWidth / mode.width
+        modeID = mode.ioDisplayModeID
+        modeRef = mode
+        //colorDepth = Int( mode.BitsPerSample )
+        //resolution = Int( mode[kCGDisplayResolution] )
         
         frequency = Int( mode.refreshRate )
         if frequency == 0 {
@@ -105,9 +118,32 @@ struct DisplayInfo {
             frequency = Int( timeScale / time.timeValue )
         }
     }
+    
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        if lhs.scale < rhs.scale { return true }
+        else if lhs.width < rhs.width { return true }
+        else { return false }
+    }
 
-    static func ~= (lhs: Self, rhs: DisplayUserSetting) -> Bool {
-        return rhs ~= lhs
+    static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
+        var bool = rhs.width == lhs.width
+
+        if rhs.height != nil { bool = bool && rhs.height == lhs.height }
+        if rhs.scale != nil { bool = bool && rhs.scale == lhs.scale }
+        return bool
+
+    }
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        return lhs.width == rhs.width &&
+            lhs.height == rhs.height &&
+            lhs.scale == rhs.scale /*&&
+            lhs.frequency == rhs.frequency*/
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(width)
+        hasher.combine(height)
+        hasher.combine(scale)
+        //hasher.combine(frequency)
     }
 }
 
@@ -115,7 +151,7 @@ struct DisplayInfo {
 // 1    width                   => 2
 // 2    id, width
 // 3    width, scale            => 6
-// 4    width, height           => 
+// 4    width, height           =>
 // 5    id, width, height
 // 6    id, width, scale
 // 7    id, width, height, scale
@@ -146,13 +182,9 @@ struct DisplayUserSetting {
         }
     }
 
-    // override a lesser-used operator to simplify diplay mode checks
-    static func ~= (lhs: Self, rhs: DisplayInfo) -> Bool {
-        var bool = lhs.width == rhs.width
-
-        if lhs.height != nil { bool = bool && lhs.height == rhs.height }
-        if lhs.scale != nil { bool = bool && lhs.scale == rhs.scale }
-        return bool
+    // override a lesser-used operator to simplify display mode checks
+    static func == (lhs: Self, rhs: DisplayInfo) -> Bool {
+        return rhs == lhs
     }
 }
 
