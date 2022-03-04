@@ -28,13 +28,13 @@ class DisplayManager {
         let subList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
             .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
         
-        
         option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
         let modeList = ( CGDisplayCopyAllDisplayModes(displayID, option) as! Array )
             .filter { ($0 as CGDisplayMode).isUsableForDesktopGUI() }
                 
-
         self.modes = modeList.filter { !subList.contains($0) }
+
+        // Array.unique is requires converting to DisplayInfo first
         self.displayInfo = Array(Set(
             modes.map { DisplayInfo(displayID:displayID, mode:$0) }
         )).sorted()
