@@ -1,11 +1,14 @@
 #!/usr/bin/env xcrun -sdk macosx swift
-//vim: ts=2:tw=78: et:
+
 //
-//  x2.swift
+//  scres.swift
 //  
 //
 //  Created by john on 20/1/2020.
 //
+//  WARNING: it contains concentrated dosage of Swift CGDisplayMode hacks and fuckery. 
+//  CGDisplayMode in Swiftlang is not very well documented, perhaps rightfully so since it's rarely used.
+//  Reader discretion is advised.
 
 import Foundation
 import CoreFoundation
