@@ -15,6 +15,7 @@ import OSAKit
 import IOKit
 
 // from https://medium.com/swlh/f6ea6a2babf8
+// for dealing with CGDisplayModeFromJSON.RefreshRate, which return String or Double 0 in various settings
 enum StringOrDouble: Decodable {
   case string(String)
   case double(Double)
@@ -35,7 +36,7 @@ enum StringOrDouble: Decodable {
     case couldNotFindStringOrDouble
   }
 }
-// this can be retrieve by printing CGDisplayMode
+// this can be retrieved by printing CGDisplayMode
 struct CGDisplayModeFromJSON: Decodable {
   var BitsPerPixel = 32;
   var BitsPerSample = 8;
@@ -45,7 +46,7 @@ struct CGDisplayModeFromJSON: Decodable {
   var IOFlags = 1048579;
   var Mode = 0;
   var PixelEncoding = "--------RRRRRRRRGGGGGGGGBBBBBBBB";
-  // making a type augmentation as program return String or 0 in different settings
+  // making a type augmentation as program return String or 0 in various settings
   var RefreshRate:StringOrDouble// = "30.00001525878906";
   var SamplesPerPixel = 3;
   var UsableForDesktopGUI = 1;
@@ -63,6 +64,7 @@ struct CGDisplayModeFromJSON: Decodable {
   var kCGDisplayResolution = 1;
   var kCGDisplayVerticalResolution = 163;
 }
+// use the object as key in a later process of mode filtering/winnowing
 extension CGDisplayModeFromJSON: Hashable & Equatable {
   func hash(into hasher: inout Hasher) {
     hasher.combine(Width)
@@ -75,6 +77,8 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
           lhs.Height == rhs.Height && lhs.kCGDisplayPixelsHigh == rhs.kCGDisplayPixelsHigh
   }
 
+  // for property loop in mode filtering
+  // and as a side effect, we could accomplish `RefreshRate` type coersion
   subscript(index:String) -> Int {
     get {
       switch index {
@@ -95,25 +99,28 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
     }
   }
 
+  // this is a hack to read private members in CGDisplayMode
   static func decode(from modes:[CGDisplayMode]) -> [CGDisplayModeFromJSON]? {
     do {
-        // this is a hack to read private members in CGDisplayMode
+        // first we operate the string to make it look like JSON String
         let jsonStyleModes = try CGDisplayModeFromJSON.replaces(in: "\(modes)", replacement: self.replacement)
 
+        // then we try to decode it as JSON
         let decoder = JSONDecoder()
-        
         let modesObject = try decoder.decode([CGDisplayModeFromJSON].self, from: jsonStyleModes.data(using: .utf8)!)
 
+        // preliminary integrity check
         guard modesObject.count == modes.count else { return nil }
 
         return modesObject
-    }catch {
+    } catch {
+        // TODO: catch error and warn user properly
         print(error)
-
         return nil
     }
   }
 
+  // for JSON hacking
   static private let replacement = [
     // bracket: remove CGDisplayMode and [
     #"\<CGDisplayMode\s0x([0-9a-f]+)\>\s\["#: "",
@@ -126,6 +133,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
     // separator: replace ; with ,
     ";": ",",
   ]
+  // for JSON hacking
   static private func replaces(in str:String, replacement: [String:String]) throws -> String {
     var out = str
     for (key, value) in replacement {
@@ -139,6 +147,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
 }
 
 // return width, height and frequency info for corresponding displayID
+// TODO: eliminate the use of DisplayInfo in favor of the newer, and more informative CGDisplayModeFromJSON
 struct DisplayInfo:Hashable & Comparable & Equatable {
   static let MAX_SCALE = 10
   var width, height, scale, frequency, resolution:Int
@@ -169,7 +178,7 @@ struct DisplayInfo:Hashable & Comparable & Equatable {
       frequency = Int( timeScale / time.timeValue )
     }
   }
-  
+  // TODO: get rid of it,since we are not comparing DisplayInfo
   static func < (lhs: Self, rhs: Self) -> Bool {
     return lhs.scale != rhs.scale ? lhs.scale < rhs.scale : lhs.width < rhs.width
   }
@@ -193,7 +202,7 @@ struct DisplayInfo:Hashable & Comparable & Equatable {
   }
 }
 
-
+// utility functions in CGDisplayMode filtering
 struct Sieve {
   let propertyList = ["frequency", "kCGDisplayHorizontalResolution", "DepthFormat", "BitsPerSample"]
   
@@ -207,14 +216,17 @@ struct Sieve {
       filtered[prop] = []
     }
   }
+  // update for new maxValue
   mutating func refresh(for prop:String, maxValue:Int, element:Int) {
     largest[prop] = maxValue
     filtered[prop] = [element]
   }
+  // add record of elements for current maxValue 
   mutating func append(for prop:String, element:Int) {
     filtered[prop]!.append(element)
   }
 
+  // invoking maxValue update & record-keeping
   mutating func loop(in modesObject:[CGDisplayModeFromJSON], range arr:[Int]) {
     for prop in propertyList {
       arr.forEach { i in switch modesObject[i][prop] {
@@ -231,6 +243,9 @@ struct Sieve {
     return filtered["DepthFormat"]!.contains(element) && filtered["BitsPerSample"]!.contains(element)
   }
 
+  // find the best mode for certain (but not all) condition
+  // similar to Arrow's law, we DO NOT guarantee the mode is uniformly the best
+  // but we do try to winnow out the bad modes ;)
   subscript(index:String) -> [Int] {
     get {
       switch index {
@@ -243,6 +258,7 @@ struct Sieve {
   }
 }
 
+// DisplayMode & DisplayID management center
 class DisplayManager {
   let displayID:CGDirectDisplayID,
       displayInfo:[DisplayInfo],
@@ -274,6 +290,7 @@ class DisplayManager {
       let cursor = modesObject[modeIndex]
       
       var shortlist = [Int]()
+      // key is only used to identify current mode setting
       for (key, arr) in category {
           var sieve = Sieve.init()
 
@@ -321,9 +338,6 @@ class DisplayManager {
   }
   
   private func _set(_ di:DisplayInfo) {
-    //let mode:CGDisplayMode = di.mode
-    //print(mode.width, mode.pixelWidth, di.scale, di.width, mode)
-
     print("Setting display mode")
 
     var config:CGDisplayConfigRef?
@@ -452,8 +466,9 @@ struct DarkMode {
 }
 
 func sleepDisplay() {
-  // for legacy system
   let wrangler = strdup("IOService:/IOResources/IODisplayWrangler")
+  // for legacy system
+  // current compile threshold is a ballpark guess, tested on Catalina only  
   #if compiler(<5.5)
   let flag = kIOMasterPortDefault
   #else
