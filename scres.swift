@@ -1,5 +1,5 @@
 #!/usr/bin/env xcrun -sdk macosx swift
-
+//vim: ts=2:tw=78: et:
 //
 //  x2.swift
 //  
@@ -8,156 +8,345 @@
 //
 
 import Foundation
+import CoreFoundation
 import ApplicationServices
 import CoreVideo
 import OSAKit
 import IOKit
 
-class DisplayManager {
-    let displayID:CGDirectDisplayID, displayInfo:[DisplayInfo]
-    let modeID:Int32
+// from https://medium.com/swlh/f6ea6a2babf8
+enum StringOrDouble: Decodable {
+  case string(String)
+  case double(Double)
+  
+  init(from decoder: Decoder) throws {
+    if let string = try? decoder.singleValueContainer().decode(String.self) {
+      self = .string(string)
+      return
+    }
 
-    init(_ displayID:CGDirectDisplayID) {
-        self.displayID = displayID
+    if let double = try? decoder.singleValueContainer().decode(Double.self) {
+      self = .double(double)
+      return
+    }
+    throw Error.couldNotFindStringOrDouble
+  }
+  enum Error: Swift.Error {
+    case couldNotFindStringOrDouble
+  }
+}
+// this can be retrieve by printing CGDisplayMode
+struct CGDisplayModeFromJSON: Decodable {
+  var BitsPerPixel = 32;
+  var BitsPerSample = 8;
+  var DepthFormat = 4;
+  var Height = 2160;
+  var IODisplayModeID = "-2147454976";
+  var IOFlags = 1048579;
+  var Mode = 0;
+  var PixelEncoding = "--------RRRRRRRRGGGGGGGGBBBBBBBB";
+  // making a type augmentation as program return String or 0 in different settings
+  var RefreshRate:StringOrDouble// = "30.00001525878906";
+  var SamplesPerPixel = 3;
+  var UsableForDesktopGUI = 1;
+  var Width = 3840;
+  var kCGDisplayBytesPerRow = 15360;
+  var kCGDisplayHorizontalResolution = 163;
+  var kCGDisplayModeIsInterlaced = 0;
+  var kCGDisplayModeIsSafeForHardware = 1;
+  var kCGDisplayModeIsStretched = 0;
+  var kCGDisplayModeIsTelevisionOutput = 1;
+  var kCGDisplayModeIsUnavailable = 0;
+  var kCGDisplayModeSuitableForUI = 1;
+  var kCGDisplayPixelsHigh = 2160;
+  var kCGDisplayPixelsWide = 3840;
+  var kCGDisplayResolution = 1;
+  var kCGDisplayVerticalResolution = 163;
+}
+extension CGDisplayModeFromJSON: Hashable & Equatable {
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(Width)
+    hasher.combine(Height)
+    hasher.combine(kCGDisplayPixelsWide)
+    hasher.combine(kCGDisplayPixelsHigh)
+  }
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    return lhs.Width == rhs.Width && lhs.kCGDisplayPixelsWide == rhs.kCGDisplayPixelsWide &&
+          lhs.Height == rhs.Height && lhs.kCGDisplayPixelsHigh == rhs.kCGDisplayPixelsHigh
+  }
+
+  subscript(index:String) -> Int {
+    get {
+      switch index {
+        case "kCGDisplayHorizontalResolution": return self.kCGDisplayHorizontalResolution
+        case "DepthFormat": return self.DepthFormat
+        case "BitsPerSample": return self.BitsPerSample
+        case "scale":  return self.kCGDisplayPixelsWide / self.Width
+        case "frequency": 
+          //print(self.RefreshRate)
+          switch self.RefreshRate {
+          case StringOrDouble.string(let s):
+            return Int(s)!
+          case StringOrDouble.double(let d):
+            return Int( d.rounded() )
+          }
+        default: return 0
+      }
+    }
+  }
+
+  static func decode(from modes:[CGDisplayMode]) -> [CGDisplayModeFromJSON]? {
+    do {
+        // this is a hack to read private members in CGDisplayMode
+        let jsonStyleModes = try CGDisplayModeFromJSON.replaces(in: "\(modes)", replacement: self.replacement)
+
+        let decoder = JSONDecoder()
         
-        let mode = CGDisplayCopyDisplayMode(displayID)!
-        self.modeID = mode.ioDisplayModeID
-        
-        /*
-        var option:CFDictionary?
-        let subList = CGDisplayCopyAllDisplayModes(displayID, option)
-        
-        option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
-        // modes:[CGDisplayMode]
-        let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
-            .filter {
-                !(subList as! Array).contains($0) &&
-                $0.isUsableForDesktopGUI()
-            }
-        */
-        let option:CFDictionary? = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary
-        let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
-            .filter { $0.isUsableForDesktopGUI() }
-        self.displayInfo = modes.map { DisplayInfo(displayID: displayID, mode: $0) }
+        let modesObject = try decoder.decode([CGDisplayModeFromJSON].self, from: jsonStyleModes.data(using: .utf8)!)
 
-        // Array.unique is requires converting to DisplayInfo first
-        /*self.displayInfo = Array(Set(
-            modes.map { DisplayInfo(displayID:displayID, mode:$0) }
-        )).sorted()
-        */
-    }
-    
-    private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
-        // We assume that 5 digits are enough to hold dimensions.
-        // 100K monitor users will just have to live with a bit of formatting misalignment.
-        return String(
-            format:"  %@ %5d x %4d @ %dx @ %dHz%@",
-            leadingString,
-            di.width, di.height,
-            di.scale, di.frequency,
-            trailingString
-        )
-    }
-    
-    func printForOneDisplay(_ leadingString:String) {
-        let di = displayInfo.filter { $0.modeID == modeID }
-        print(displayInfo.count
-              , di[0].modeRef.ioDisplayModeID, di[0].modeRef.ioFlags
-              , di[1].modeRef.ioDisplayModeID, di[1].modeRef.ioFlags)
-        //print(_format(di[0], leadingString:leadingString, trailingString:""))
-    }
-    
-    func printFormatForAllModes() {
-        displayInfo.forEach { di in
-            let b = di.modeID == modeID
-            print(_format(di, leadingString: b ? "\u{001B}[0;33m⮕" : " ", trailingString: b ? "\u{001B}[0;49m" : ""))
-        }
-    }
-    
-    private func _set(_ di:DisplayInfo) {
-        let mode:CGDisplayMode = di.modeRef
-        print(mode.width, mode.pixelWidth, di.scale, di.width, mode)
+        guard modesObject.count == modes.count else { return nil }
 
-        print("Setting display mode")
+        return modesObject
+    }catch {
+        print(error)
 
-        var config:CGDisplayConfigRef?
-        
-        let error:CGError = CGBeginDisplayConfiguration(&config)
-        if error == .success {
-            CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
-                        
-            let afterCheck = CGCompleteDisplayConfiguration(config, CGConfigureOption.permanently)
-            if afterCheck != .success { CGCancelDisplayConfiguration(config) }
-        }
+        return nil
     }
+  }
 
-    func set(with setting: DisplayUserSetting) {
-        print("setting", setting)
-        if let di = displayInfo.first(where: { setting == $0 }) {
-            if di.modeID != modeID { _set(di) }
-        } else {
-            print("This mode is unavailable")
-        }
+  static private let replacement = [
+    // bracket: remove CGDisplayMode and [
+    #"\<CGDisplayMode\s0x([0-9a-f]+)\>\s\["#: "",
+    // bracket: remove last ]
+    #"\](?!\n)"#: "",
+    // assignment & quotation: replace = with :
+    #"\ ="#: #"\"\ :"#,
+    // quotation: insert " at every new line execpt following by }
+    #"\n(?!\})\s*"#: "\n\"",
+    // separator: replace ; with ,
+    ";": ",",
+  ]
+  static private func replaces(in str:String, replacement: [String:String]) throws -> String {
+    var out = str
+    for (key, value) in replacement {
+        let range = NSRange(out.startIndex..<out.endIndex, in:out)
+        let r = try NSRegularExpression(pattern: key, options: [])
+        out = r.stringByReplacingMatches(in: out, options: [], range: range, withTemplate: value)
     }
+    // TODO: investigate why replacement fails
+    return out + "]"
+  }
 }
 
 // return width, height and frequency info for corresponding displayID
 struct DisplayInfo:Hashable & Comparable & Equatable {
-    static let MAX_SCALE = 10
-    var width, height, scale, frequency:Int
-    var modeID:Int32
-    var modeRef:CGDisplayMode
-    //var colorDepth, resolution:Int
+  static let MAX_SCALE = 10
+  var width, height, scale, frequency, resolution:Int
+  var bps, depth:Int
+  var modeID:Int32
+  var mode:CGDisplayMode
+  //var colorDepth, resolution:Int
 
-    init(displayID:CGDirectDisplayID, mode:CGDisplayMode) {
-        width = mode.width
-        height = mode.height
-        scale = mode.pixelWidth / mode.width
-        modeID = mode.ioDisplayModeID
-        modeRef = mode
-        //colorDepth = Int( mode.BitsPerSample )
-        //resolution = Int( mode[kCGDisplayResolution] )
-        
-        frequency = Int( mode.refreshRate )
-        if frequency == 0 {
-            var link:CVDisplayLink?
-            CVDisplayLinkCreateWithCGDisplay(displayID, &link)
-            
-            let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
-            // timeValue is in fact already in Int64
-            let timeScale = Int64(time.timeScale) + time.timeValue / 2
-            
-            frequency = Int( timeScale / time.timeValue )
-        }
-    }
+  init(displayID:CGDirectDisplayID, modeFromJSON:CGDisplayModeFromJSON, mode:CGDisplayMode) {
+    width = modeFromJSON.Width
+    height = modeFromJSON.Height
+    resolution = modeFromJSON.kCGDisplayHorizontalResolution
+    modeID = Int32(modeFromJSON.IODisplayModeID)!
+    depth = modeFromJSON.DepthFormat
+    bps = modeFromJSON.BitsPerSample
     
-    static func < (lhs: Self, rhs: Self) -> Bool {
-        if lhs.scale < rhs.scale { return true }
-        else if lhs.width < rhs.width { return true }
-        else { return false }
+    self.mode = mode
+    scale = modeFromJSON["scale"]        
+    frequency = modeFromJSON["frequency"]
+    if frequency == 0 {
+      var link:CVDisplayLink?
+      CVDisplayLinkCreateWithCGDisplay(displayID, &link)
+      
+      let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+      // timeValue is in fact already in Int64
+      let timeScale = Int64(time.timeScale) + time.timeValue / 2
+      
+      frequency = Int( timeScale / time.timeValue )
     }
+  }
+  
+  static func < (lhs: Self, rhs: Self) -> Bool {
+    return lhs.scale != rhs.scale ? lhs.scale < rhs.scale : lhs.width < rhs.width
+  }
 
-    static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
-        var bool = rhs.width == lhs.width
+  static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
+    var bool = rhs.width == lhs.width
 
-        if rhs.height != nil { bool = bool && rhs.height == lhs.height }
-        if rhs.scale != nil { bool = bool && rhs.scale == lhs.scale }
-        return bool
-
-    }
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        return lhs.width == rhs.width &&
-            lhs.height == rhs.height &&
-            lhs.scale == rhs.scale /*&&
-            lhs.frequency == rhs.frequency*/
-    }
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(width)
-        hasher.combine(height)
-        hasher.combine(scale)
-        //hasher.combine(frequency)
-    }
+    if rhs.height != nil { bool = bool && rhs.height == lhs.height }
+    if rhs.scale != nil { bool = bool && rhs.scale == lhs.scale }
+    return bool
+  }
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    return lhs.width == rhs.width &&
+        lhs.height == rhs.height &&
+        lhs.scale == rhs.scale
+  }
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(width)
+    hasher.combine(height)
+    hasher.combine(scale)
+  }
 }
+
+
+struct Sieve {
+  let propertyList = ["frequency", "kCGDisplayHorizontalResolution", "DepthFormat", "BitsPerSample"]
+  
+  var largest:[String:Int]
+  var filtered:[String:[Int]]
+  init() {
+    largest = [String:Int]()
+    filtered = [String:[Int]]()
+    for prop in propertyList {
+      largest[prop] = 0
+      filtered[prop] = []
+    }
+  }
+  mutating func refresh(for prop:String, maxValue:Int, element:Int) {
+    largest[prop] = maxValue
+    filtered[prop] = [element]
+  }
+  mutating func append(for prop:String, element:Int) {
+    filtered[prop]!.append(element)
+  }
+
+  mutating func loop(in modesObject:[CGDisplayModeFromJSON], range arr:[Int]) {
+    for prop in propertyList {
+      arr.forEach { i in switch modesObject[i][prop] {
+        case let x where x > largest[prop]!:
+          self.refresh(for: prop, maxValue: x, element: i)
+        case let x where x == largest[prop]!:
+          self.append(for: prop, element: i)
+        default: break
+      }}
+    }
+  }
+
+  private func look(for element:Int) -> Bool {
+    return filtered["DepthFormat"]!.contains(element) && filtered["BitsPerSample"]!.contains(element)
+  }
+
+  subscript(index:String) -> [Int] {
+    get {
+      switch index {
+      case "bestModeByRefreshRate": return filtered["frequency"]!.filter { look(for: $0) }
+      case "bestModeByResolution": return filtered["kCGDisplayHorizontalResolution"]!.filter { look(for: $0) }
+      case "bestMode": return Array(Set(self["bestModeByResolution"]).intersection(self["bestModeByRefreshRate"]))
+      default: return [0]
+      }
+    }
+  }
+}
+
+class DisplayManager {
+  let displayID:CGDirectDisplayID,
+      displayInfo:[DisplayInfo],
+      modeID:Int32,
+      mode: CGDisplayMode
+
+  init(_ displayID:CGDirectDisplayID) {
+    self.displayID = displayID
+    
+    /*
+     //https://stackoverflow.com/questions/8210824/how-to-avoid-cgdisplaymodecopypixelencoding-to-get-bpp
+     */
+    //omitting `self.` prefix
+    mode = CGDisplayCopyDisplayMode(displayID)!
+    modeID = mode.ioDisplayModeID
+    
+    let option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary?
+    let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
+        .filter { $0.isUsableForDesktopGUI() }
+    
+    let modeIndex = modes.firstIndex(of: mode)!
+     
+    if let modesObject = CGDisplayModeFromJSON.decode(from: modes) {
+      // group modes by `scale, width, height` and then carefully winnow out improper modes in each group            
+      let category = Array(0..<modesObject.count).reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
+          category[modesObject[i], default: []].append(i)
+      }
+      
+      let cursor = modesObject[modeIndex]
+      
+      var shortlist = [Int]()
+      for (key, arr) in category {
+          var sieve = Sieve.init()
+
+          sieve.loop(in: modesObject, range: arr)
+
+          var bestMode = sieve["bestMode"]
+          if key == cursor && !bestMode.contains(modeIndex) { bestMode.append(modeIndex) }
+          shortlist += bestMode
+      } // end of highly abstracted max
+                  
+      self.displayInfo = shortlist.map { DisplayInfo(displayID: displayID, modeFromJSON: modesObject[$0], mode: modes[$0]) }.sorted()
+    } else {
+      self.displayInfo = []
+    }
+  }
+  
+  private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
+    // We assume that 5 digits are enough to hold dimensions.
+    // 100K monitor users will just have to live with a bit of formatting misalignment.
+    return String(
+      format:"  %@ %6d x %5d  @ %1dx %5dHz %7d %9d%@",
+      leadingString,
+      di.width, di.height,
+      di.scale, di.frequency,
+      di.resolution, di.depth, 
+      trailingString
+    )
+  }
+  
+  func printForOneDisplay(_ leadingString:String) {
+    let di = displayInfo.filter { $0.modeID == modeID }
+    //print(displayInfo.count
+      //    , di[0].mode.ioDisplayModeID, di[0].mode.ioFlags
+      //    , di[1].mode.ioDisplayModeID, di[1].mode.ioFlags)
+    print(_format(di[0], leadingString:leadingString, trailingString:""))
+  }
+  
+  func printFormatForAllModes() {
+    print("     Width x Height @ Scale Refresh Resolution  ColorDepth")
+
+    displayInfo.forEach { di in
+        let b = di.mode == self.mode
+        print(_format(di, leadingString: b ? "\u{001B}[0;33m⮕" : " ", trailingString: b ? "\u{001B}[0;49m" : ""))
+    }
+  }
+  
+  private func _set(_ di:DisplayInfo) {
+    //let mode:CGDisplayMode = di.mode
+    //print(mode.width, mode.pixelWidth, di.scale, di.width, mode)
+
+    print("Setting display mode")
+
+    var config:CGDisplayConfigRef?
+    
+    let error:CGError = CGBeginDisplayConfiguration(&config)
+    if error == .success {
+      CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
+                  
+      let afterCheck = CGCompleteDisplayConfiguration(config, CGConfigureOption.permanently)
+      if afterCheck != .success { CGCancelDisplayConfiguration(config) }
+    }
+  }
+
+  func set(with setting: DisplayUserSetting) {
+    print("setting", setting)
+    if let di = displayInfo.last(where: { setting == $0 }) {
+      if di.mode != self.mode { _set(di) }
+    } else {
+      print("This mode is unavailable")
+    }
+  }
+}
+
 
 // Supported command calls:
 // 1    width                   => 2
@@ -168,105 +357,112 @@ struct DisplayInfo:Hashable & Comparable & Equatable {
 // 6    id, width, scale
 // 7    id, width, height, scale
 struct DisplayUserSetting {
-    var displayIndex = 0, width = 0
-    var height, scale:Int?
-    init(_ arr:[String]) {
-        var args = arr.compactMap { Int($0) }
-        
-        if args.count < 1 { return }
-        
-        if args[0] > Screens.MAX_DISPLAYS { args.insert(0 /* displayIndex */, at:0) }
+  var displayIndex = 0, width = 0
+  var height, scale:Int?
+  init(_ arr:[String]) {
+    var args = arr.compactMap { Int($0) }
+    
+    if args.count < 1 { return }
+    
+    if args[0] > Screens.MAX_DISPLAYS { args.insert(0 /* displayIndex */, at:0) }
 
-        if args.count < 2 { return }
+    if args.count < 2 { return }
 
-        displayIndex = args[0]
-        width = args[1]
+    displayIndex = args[0]
+    width = args[1]
 
-        if args.count == 2 { return }
+    if args.count == 2 { return }
 
-        if args[2] > DisplayInfo.MAX_SCALE {
-            height = args[2]
-            if args.count > 3 { scale = args[3] }
-        }
-        else {
-            scale = args[2]
-            if args.count > 3 { height = args[3] }
-        }
+    if args[2] > DisplayInfo.MAX_SCALE {
+      height = args[2]
+      if args.count > 3 { scale = args[3] }
     }
-
-    // override a lesser-used operator to simplify display mode checks
-    static func == (lhs: Self, rhs: DisplayInfo) -> Bool {
-        return rhs == lhs
+    else {
+      scale = args[2]
+      if args.count > 3 { height = args[3] }
     }
+  }
+
+  // override a lesser-used operator to simplify display mode checks
+  static func == (lhs: Self, rhs: DisplayInfo) -> Bool {
+      return rhs == lhs
+  }
 }
 
 class Screens {
-    // assume at most 8 display connected
-    static let MAX_DISPLAYS = 8
-    var maxDisplays = MAX_DISPLAYS
+  // assume at most 8 display connected
+  static let MAX_DISPLAYS = 8
+  var maxDisplays = MAX_DISPLAYS
+  // actual number of display
+  var displayCount:Int = 0
+  var dm = [DisplayManager]()
+  
+  init() {
     // actual number of display
-    var displayCount:Int = 0
-    var dm = [DisplayManager]()
-    
-    init() {
-        // actual number of display
-        var displayCount32:UInt32 = 0
-        var displayIDs = [CGDirectDisplayID](repeating: 0, count:maxDisplays)
+    var displayCount32:UInt32 = 0
+    var displayIDs = [CGDirectDisplayID](repeating: 0, count:maxDisplays)
 
-        guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
-            print("Error on getting online display List.")
-            return
-        }
-        displayCount = Int( displayCount32 )
-        dm = displayIDs
-            .filter { $0 != 0 }
-            .map { DisplayManager($0) }
+    guard CGGetOnlineDisplayList(UInt32(maxDisplays), &displayIDs, &displayCount32) == .success else {
+        print("Error on getting online display List.")
+        return
     }
+    displayCount = Int( displayCount32 )
+    dm = displayIDs
+        .filter { $0 != 0 }
+        .map { DisplayManager($0) }
+  }
 
-    // print a list of all displays
-    // used by -l
-    func listDisplays() {
-        for (i, m) in dm.enumerated() {
-           m.printForOneDisplay("Display \(i):")
-        }
+  // print a list of all displays
+  // used by -l
+  func listDisplays() {
+    for (i, m) in dm.enumerated() {
+     m.printForOneDisplay("Display \(i):")
     }
+  }
 
-    func listModes(_ displayIndex:Int) {
-        dm[displayIndex].printFormatForAllModes()
-    }
+  func listModes(_ displayIndex:Int) {
+    dm[displayIndex].printFormatForAllModes()
+  }
 
-    func set(with setting:DisplayUserSetting) {
-        dm[setting.displayIndex].set(with:setting)
-    }
+  func set(with setting:DisplayUserSetting) {
+    dm[setting.displayIndex].set(with:setting)
+  }
 }
 
 // darkMode toggle code with JXA ;-)
 // Method from Stackoverflow User: bacongravy
 // https://stackoverflow.com/questions/44209057
 struct DarkMode {
-    static let scriptString = """
-    pref = Application(\"System Events\").appearancePreferences
-    pref.darkMode = !pref.darkMode()
+  static let scriptString = """
+  pref = Application(\"System Events\").appearancePreferences
+  pref.darkMode = !pref.darkMode()
 """
-    let script = OSAScript.init(source: scriptString, language: OSALanguage.init(forName: "JavaScript"))
-    
-    init() {
-        var compileError: NSDictionary?
+  let script = OSAScript.init(source: scriptString, language: OSALanguage.init(forName: "JavaScript"))
+  
+  init() {
+    var compileError: NSDictionary?
 
-        script.compileAndReturnError(&compileError)
-    }
-    func toggle() {
-        var scriptError: NSDictionary?
+    script.compileAndReturnError(&compileError)
+  }
+  func toggle() {
+    var scriptError: NSDictionary?
 
-        if let result = script.executeAndReturnError(&scriptError)?.stringValue { print("Dark Mode:", result) }
-    }
+    if let result = script.executeAndReturnError(&scriptError)?.stringValue { print("Dark Mode:", result) }
+  }
 }
 
 func sleepDisplay() {
-    let r = IORegistryEntryFromPath(kIOMainPortDefault, strdup("IOService:/IOResources/IODisplayWrangler"))
-
-    IORegistryEntrySetCFProperty(r, ("IORequestIdle" as CFString), kCFBooleanTrue)
-    IOObjectRelease(r)
+  // for legacy system
+  let wrangler = strdup("IOService:/IOResources/IODisplayWrangler")
+  #if compiler(<5.5)
+  let flag = kIOMasterPortDefault
+  #else
+  let flag = kIOMainPortDefault
+  #endif
+  // https://github.com/glfw/glfw/issues/1985
+  let r = IORegistryEntryFromPath(flag, wrangler)
+  IORegistryEntrySetCFProperty(r, ("IORequestIdle" as CFString), kCFBooleanTrue)
+  IOObjectRelease(r)
 }
 
 func seeHelp() {
@@ -276,59 +472,61 @@ screen-resolution-switcher [-h|--help] [-l|--list|list] [-m|--mode|mode displayI
 [-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width],
 
 Here are some examples:
-   -h               get help
-   -l               list displays
-   -m 0             list all mode from a certain display
-   -m               shorthand for -m 0
-   -s 0 800 600 1   set resolution of display 0 to 800 x 600 @ 1x [@ 60Hz]
-   -s 0 800 600     set resolution of display 0 to 800 x 600 @(highest scale factor)
-   -s 0 800 1       set resolution of display 0 to 800 [x 600] @ 1x [@ 60Hz]
-   -s 0 800         shorthand for -s 0 800 2 (highest scale factor)
-   -s 800           shorthand for -s 0 800 2 (highest scale factor)
-   -r 0 800         shorthand for -s 0 800 2
-   -r 800           shorthand for -s 0 800 2
-   -d               toggle macOS Dark Mode
-   -sl              sleep display
+ -h               get help
+ -l               list displays
+ -m 0             list all mode from a certain display
+ -m               shorthand for -m 0
+ -s 0 800 600 1   set resolution of display 0 to 800 x 600 @ 1x [@ 60Hz]
+ -s 0 800 600     set resolution of display 0 to 800 x 600 @(highest scale factor)
+ -s 0 800 1       set resolution of display 0 to 800 [x 600] @ 1x [@ 60Hz]
+ -s 0 800         shorthand for -s 0 800 2 (highest scale factor)
+ -s 800           shorthand for -s 0 800 2 (highest scale factor)
+ -r 0 800         shorthand for -s 0 800 2
+ -r 800           shorthand for -s 0 800 2
+ -d               toggle macOS Dark Mode
+ -sl              sleep display
 """)
 }
 
 func main() {
-    let screens = Screens()
+  let screens = Screens()
 
-    let arguments = CommandLine.arguments
-    let count = arguments.count
-    guard count >= 2 else {
-        seeHelp()
-        return
-    }
-    switch arguments[1] {
-    case "-l", "--list", "list":
-        screens.listDisplays()
-    case "-m", "--mode", "mode":
-        var displayIndex = 0
-        if count > 2, let index = Int(arguments[2]) {
-            displayIndex = index
-        }
-        if displayIndex < screens.displayCount {
-            print("Supported Modes for Display \(displayIndex):")
-            screens.listModes(displayIndex)
-        } else {
-            print("Display index not found. List all available displays by:\n    screen-resolution-switcher -l")
-        }
-    case "-s", "--set", "set", "-r", "--set-retina", "retina":
-        screens.set(with:DisplayUserSetting( arguments ))
-    case "-d", "--toggle-dark-mode":
-        DarkMode().toggle()
-    case "-sl", "--sleep", "sleep":
-        sleepDisplay()
-    default:
-        seeHelp()
-    }
+  let arguments = CommandLine.arguments
+  let count = arguments.count
+  guard count >= 2 else {
+      seeHelp()
+      return
+  }
+  switch arguments[1] {
+  case "-l", "--list", "list":
+      screens.listDisplays()
+  case "-m", "--mode", "mode":
+      var displayIndex = 0
+      if count > 2, let index = Int(arguments[2]) {
+          displayIndex = index
+      }
+      if displayIndex < screens.displayCount {
+          print("Supported Modes for Display \(displayIndex):")
+          screens.listModes(displayIndex)
+      } else {
+          print("Display index not found. List all available displays by:\n    screen-resolution-switcher -l")
+      }
+  case "-s", "--set", "set", "-r", "--set-retina", "retina":
+      screens.set(with:DisplayUserSetting( arguments ))
+  case "-d", "--toggle-dark-mode":
+      DarkMode().toggle()
+  case "-sl", "--sleep", "sleep":
+      //if #available(macOS 12.0, *) {
+          sleepDisplay()
+      //}
+  default:
+      seeHelp()
+  }
 }
 
 #if os(macOS)
-    // run it
-    main()
+  // run it
+  main()
 #else
-    print("This script currently only runs on macOS")
+  print("This script currently only runs on macOS")
 #endif
