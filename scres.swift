@@ -91,12 +91,14 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
       lhs["kCGDisplayHorizontalResolution"] == rhs["kCGDisplayHorizontalResolution"]
   }
 
+  // for sorting
   static func < (lhs: Self, rhs: Self) -> Bool {
     let ls = lhs["scale"]
     let rs = rhs["scale"]
     return ls != rs ? ls < rs : lhs.Width < rhs.Width
   }
 
+  // for setting comparison
   static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
     var bool = (lhs.Width == rhs.width)
 
@@ -375,10 +377,13 @@ class DisplayManager {
       print(error)
       return
     }
-    CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
+    CGConfigureDisplayWithDisplayMode(config, displayID, di.mode, nil)
                 
     let afterCheck = CGCompleteDisplayConfiguration(config, CGConfigureOption.permanently)
-    if afterCheck != .success { CGCancelDisplayConfiguration(config) }
+    if afterCheck != .success {
+      print("setting failed")
+      CGCancelDisplayConfiguration(config)
+    }
   }
 }
 
