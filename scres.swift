@@ -252,16 +252,13 @@ struct Sieve {
         let r = self["bestModeByResolution"]
 
         switch (f.count, r.count) {
-        case (0, 0):
-          return []
-        case (_, 0):
-          return [ f[0] ]
-        case(0, _):
-          return [ r[0] ]
+        case (0, 0): return []
+        case (_, 0): return [ f[0] ]
+        case (0, _): return [ r[0] ]
         default:
           let candidate = Array(Set(r).intersection(f))
-          guard candidate.count == 0 else { return candidate }
-          return []
+          guard candidate.count != 0 else { return [] }
+          return candidate
         }
       default: return []
       }
