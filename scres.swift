@@ -285,33 +285,6 @@ class DisplayManager {
       modeID:Int32,
       mode: CGDisplayMode
 
-  /*struct ModesForDisplay {
-    let displayID:CGDirectDisplayID,
-        modesObject:[CGDisplayModeFromJSON],
-        modeIndex:Int
-
-    init(_ displayID:CGDirectDisplayID, modesFromJSON:[CGDisplayModeFromJSON], currentModeIndex:Int) {
-      self.displayID = displayID
-      self.modesObject = modesFromJSON
-      self.modeIndex = currentModeIndex
-    }
-
-    func getRefreshRate(for modeFromJSON:CGDisplayModeFromJSON) -> Int {
-      var frequency = modeFromJSON["frequency"]
-      if frequency == 0 {
-        var link:CVDisplayLink?
-        CVDisplayLinkCreateWithCGDisplay(displayID, &link)
-        
-        let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
-        // timeValue is in fact already in Int64
-        let timeScale = Int64(time.timeScale) + time.timeValue / 2
-        
-        frequency = Int( timeScale / time.timeValue )
-      }
-      return frequency
-    }
-  }*/
-
   init(_ displayID:CGDirectDisplayID) {
     self.displayID = displayID
     
