@@ -77,13 +77,15 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     hasher.combine(kCGDisplayPixelsWide)
     hasher.combine(kCGDisplayPixelsHigh)
   }
-  func debug() -> String {
+  /*func debug() -> String {
     return "s:\(self["scale"]),w:\(self.Width),h:\(self.Height)"
-  }
+  }*/
+  // loose comparison for Diction Key
   static func == (lhs: Self, rhs: Self) -> Bool {
     return lhs.Width == rhs.Width && lhs.kCGDisplayPixelsWide == rhs.kCGDisplayPixelsWide &&
           lhs.Height == rhs.Height && lhs.kCGDisplayPixelsHigh == rhs.kCGDisplayPixelsHigh
   }
+  // strict comparison
   static func ~=(lhs: Self, rhs: Self) -> Bool {
     return lhs == rhs && lhs["frequency"] == rhs["frequency"] && 
       lhs["kCGDisplayHorizontalResolution"] == rhs["kCGDisplayHorizontalResolution"]
@@ -94,6 +96,15 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     let rs = rhs["scale"]
     return ls != rs ? ls < rs : lhs.Width < rhs.Width
   }
+
+  static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
+    var bool = (lhs.Width == rhs.width)
+
+    if rhs.height != nil { bool = bool && (rhs.height == lhs.Height) }
+    if rhs.scale != nil { bool = bool && (rhs.scale == lhs["scale"]) }
+    return bool
+  }
+
 
   // for property loop in mode filtering
   // and as a side effect, we could accomplish `RefreshRate` type coersion
@@ -202,10 +213,10 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }
 
     // invoking maxValue update & record-keeping
-    mutating func findMaxValueAndIndices(in modesObject:[CGDisplayModeFromJSON], withIndexArray arr:[Int]) {
+    mutating func findMaxValueAndIndices(in modesFromJSON:[CGDisplayModeFromJSON], withIndexArray arr:[Int]) {
       for prop in propertyList {
         arr.forEach { i in
-          switch modesObject[i][prop] {
+          switch modesFromJSON[i][prop] {
           // update for new maxValue   
           case let x where x > largest[prop]!:
             largest[prop] = x
@@ -241,47 +252,20 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }
   }
 
-// return width, height and frequency info for corresponding displayID
-// TODO: eliminate the use of DisplayInfo in favor of the newer, and more informative CGDisplayModeFromJSON
-struct DisplayInfo: Comparable & Equatable {
-  var width, height, scale, frequency, resolution:Int
-  var bps, depth:Int
-  var modeID:Int32
-  var mode:CGDisplayMode
-  //var colorDepth, resolution:Int
-
-  init(displayID:CGDirectDisplayID, modeFromJSON:CGDisplayModeFromJSON, mode:CGDisplayMode) {
-    width = modeFromJSON.Width
-    height = modeFromJSON.Height
-    resolution = modeFromJSON.kCGDisplayHorizontalResolution
-    modeID = Int32(modeFromJSON.IODisplayModeID)!
-    depth = modeFromJSON.DepthFormat
-    bps = modeFromJSON.BitsPerSample
-    
+struct MyDisplayMode {
+  let mode:CGDisplayMode
+  let modeFromJSON:CGDisplayModeFromJSON
+  init(mode:CGDisplayMode, modeFromJSON:CGDisplayModeFromJSON) {
     self.mode = mode
-    scale = modeFromJSON["scale"]        
-    frequency = modeFromJSON["frequency"]
+    self.modeFromJSON = modeFromJSON
   }
-  // TODO: get rid of it,since we are not comparing DisplayInfo
-  static func < (lhs: Self, rhs: Self) -> Bool {
-    return lhs.scale != rhs.scale ? lhs.scale < rhs.scale : lhs.width < rhs.width
-  }
-
-  static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
-    var bool = rhs.width == lhs.width
-
-    if rhs.height != nil { bool = bool && rhs.height == lhs.height }
-    if rhs.scale != nil { bool = bool && rhs.scale == lhs.scale }
-    return bool
-  }
-
 }
 
 
 // DisplayMode & DisplayID management center
 class DisplayManager {
   let displayID:CGDirectDisplayID,
-      displayInfo:[DisplayInfo],
+      displayInfo:[MyDisplayMode],
       modeID:Int32,
       mode: CGDisplayMode
 
@@ -301,37 +285,33 @@ class DisplayManager {
     
     let modeIndex = modes.firstIndex(of: mode)!
      
-    guard var modesObject = CGDisplayModeFromJSON.decode(from: modes) else {
+    guard var modesFromJSON = CGDisplayModeFromJSON.decode(from: modes) else {
       self.displayInfo = []
       return
     }
 
-    for i in 0..<modesObject.count {
-      modesObject[i].frequency = modesObject[i].getRefreshRate(by:displayID)
+    for i in 0..<modesFromJSON.count {
+      modesFromJSON[i].frequency = modesFromJSON[i].getRefreshRate(by:displayID)
     }
    
 
-    //print(modes[0], displayID)
-
-    //let mfd = ModesForDisplay(displayID, modesFromJSON:modesObject, currentModeIndex:modeIndex)
-
     // group modes by `scale, width, height` and then carefully winnow out improper modes in each group            
-    let category = Array(0..<modesObject.count).reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
-      category[modesObject[i], default: []].append(i)
+    let category = Array(0..<modesFromJSON.count).reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
+      category[modesFromJSON[i], default: []].append(i)
     }
     
-    let cursor = modesObject[modeIndex]
+    let cursor = modesFromJSON[modeIndex]
     
     var shortlist = [CGDisplayModeFromJSON:[Int]]()
     // key is only used to identify current mode setting
     for (key, arr) in category {
       var sieve = Sieve.init()
 
-      sieve.findMaxValueAndIndices(in: modesObject, withIndexArray: arr)
+      sieve.findMaxValueAndIndices(in: modesFromJSON, withIndexArray: arr)
 
       var bestMode = sieve["bestMode"]
       if key == cursor {
-        if bestMode.allSatisfy({ modesObject[modeIndex] == modesObject[$0] }) {
+        if bestMode.allSatisfy({ modesFromJSON[modeIndex] ~= modesFromJSON[$0] }) {
           bestMode = [modeIndex]
         } else if !bestMode.contains(modeIndex) {
           bestMode.append(modeIndex)
@@ -341,26 +321,28 @@ class DisplayManager {
     }
 
     self.displayInfo = shortlist.values
-      .flatMap {$0}
-      .map { DisplayInfo(displayID: displayID, modeFromJSON: modesObject[$0], mode: modes[$0]) }
-      .sorted()
+      .flatMap { $0 }
+      .map { MyDisplayMode.init(mode:modes[$0], modeFromJSON:modesFromJSON[$0]) }
+      .sorted { $0.modeFromJSON < $1.modeFromJSON }
+      //.map { DisplayInfo(displayID: displayID, modeFromJSON: $0.modeFromJSON, mode: $0.mode) }
   }
   
-  private func _format(_ di:DisplayInfo, leadingString:String, trailingString:String) -> String {
+  private func _format(_ di:MyDisplayMode, leadingString:String, trailingString:String) -> String {
+    let mo = di.modeFromJSON
     // We assume that 5 digits are enough to hold dimensions.
     // 100K monitor users will just have to live with a bit of formatting misalignment.
     return String(
       format:"  %@ %6d x %5d  @ %1dx %5dHz %7d %9d%@",
       leadingString,
-      di.width, di.height,
-      di.scale, di.frequency,
-      di.resolution, di.depth, 
+      mo.Width, mo.Height,
+      mo["scale"], mo["frequency"],
+      mo["kCGDisplayHorizontalResolution"], mo["DepthFormat"], 
       trailingString
     )
   }
   
   func printForOneDisplay(_ leadingString:String) {
-    let di = displayInfo.filter { $0.modeID == modeID }
+    let di = displayInfo.filter { $0.mode == self.mode }
     print(_format(di[0], leadingString:leadingString, trailingString:""))
   }
   
@@ -376,7 +358,7 @@ class DisplayManager {
   func set(with setting: DisplayUserSetting) {
     print("setting", setting)
     // comparing DisplayUserSetting with DisplayInfo
-    guard let di = displayInfo.last(where: { setting == $0 }) else{
+    guard let di = displayInfo.last(where: { $0.modeFromJSON == setting }) else{
       print("This mode is unavailable")
       return
     }
@@ -439,7 +421,7 @@ struct DisplayUserSetting {
   }
 
   // override a lesser-used operator to simplify display mode checks
-  static func == (lhs: Self, rhs: DisplayInfo) -> Bool {
+  static func == (lhs: Self, rhs: CGDisplayModeFromJSON) -> Bool {
       return rhs == lhs
   }
 }
