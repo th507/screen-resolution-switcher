@@ -263,7 +263,7 @@ struct Sieve {
           guard candidate.count == 0 else { return candidate }
           return []
         }
-      default: return [0]
+      default: return []
       }
     }
   }
