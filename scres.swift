@@ -186,7 +186,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
       case StringOrDouble.double(let d): frequency = Int( d.rounded() )
     }
 
-    guard frequency != 0 else { return frequency }
+    if frequency != 0 { return frequency }
 
     var link:CVDisplayLink?
     CVDisplayLinkCreateWithCGDisplay(displayID, &link)
