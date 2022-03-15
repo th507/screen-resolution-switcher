@@ -90,10 +90,9 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
         case "BitsPerSample": return self.BitsPerSample
         case "scale":  return self.kCGDisplayPixelsWide / self.Width
         case "frequency": 
-          //print(self.RefreshRate)
           switch self.RefreshRate {
           case StringOrDouble.string(let s):
-            return Int(s)!
+              return Int( Double(s)?.rounded() ?? 0)
           case StringOrDouble.double(let d):
             return Int( d.rounded() )
           }
@@ -105,21 +104,21 @@ extension CGDisplayModeFromJSON: Hashable & Equatable {
   // this is a hack to read private members in CGDisplayMode
   static func decode(from modes:[CGDisplayMode]) -> [CGDisplayModeFromJSON]? {
     do {
-        // first we operate the string to make it look like JSON String
-        let jsonStyleModes = try CGDisplayModeFromJSON.replaces(in: "\(modes)", replacement: self.replacement)
+      // first we operate the string to make it look like JSON String
+      let jsonStyleModes = try CGDisplayModeFromJSON.replaces(in: "\(modes)", replacement: self.replacement)
 
-        // then we try to decode it as JSON
-        let decoder = JSONDecoder()
-        let modesObject = try decoder.decode([CGDisplayModeFromJSON].self, from: jsonStyleModes.data(using: .utf8)!)
+      // then we try to decode it as JSON
+      let decoder = JSONDecoder()
+      let modesObject = try decoder.decode([CGDisplayModeFromJSON].self, from: jsonStyleModes.data(using: .utf8)!)
 
-        // preliminary integrity check
-        guard modesObject.count == modes.count else { return nil }
+      // preliminary integrity check
+      guard modesObject.count == modes.count else { return nil }
 
-        return modesObject
+      return modesObject
     } catch {
-        // TODO: catch error and warn user properly
-        print(error)
-        return nil
+      // TODO: catch error and warn user properly
+      print(error)
+      return nil
     }
   }
 
