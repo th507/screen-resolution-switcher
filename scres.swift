@@ -251,7 +251,7 @@ struct Sieve {
     // find the best mode for certain (but not all) condition
     // similar to Arrow's law, we DO NOT guarantee the mode is uniformly the best
     // but we do try to winnow out the bad modes ;)
-    func computdBestMode() -> [Int] {
+    func computedBestMode() -> [Int] {
         let f = filtered["frequency"]!.filter { look(for: $0) }
         let r = filtered["kCGDisplayHorizontalResolution"]!.filter { look(for: $0) }
         
@@ -264,6 +264,22 @@ struct Sieve {
             guard candidate.count != 0 else { return [] }
             return candidate
         }
+    }
+    func computedBestMode(in modesFromJSON:[CGDisplayModeFromJSON], including index:Int?) -> [Int] {
+        var bestMode = self.computedBestMode()
+        if let modeIndex = index {
+            if bestMode.allSatisfy({ modesFromJSON[modeIndex] ~= modesFromJSON[$0] }) {
+                bestMode = [modeIndex]
+            } else if !bestMode.contains(modeIndex) {
+                bestMode.append(modeIndex)
+            }
+        }
+
+        return bestMode
+    }
+    static func computedBestMode(in modesFromJSON:[CGDisplayModeFromJSON], withIndexArray arr:[Int], including index:Int?) -> [Int] {
+        let sieve = Sieve.init(in: modesFromJSON, withIndexArray: arr)
+        return sieve.computedBestMode(in: modesFromJSON, including: index)
     }
 
     private func look(for element:Int) -> Bool {
@@ -284,6 +300,7 @@ class DisplayManager {
         
         /* TODO: try memeory manipulation
          * https://stackoverflow.com/questions/8210824/
+         * https://opensource.apple.com/source/IOGraphics/IOGraphics-406/IOGraphicsFamily/IOKit/graphics/IOGraphicsTypes.h.auto.html
          */
         self.mode = CGDisplayCopyDisplayMode(displayID)!
 
@@ -298,34 +315,22 @@ class DisplayManager {
             return
         }
         let cursor = modesFromJSON[modeIndex]
-        var shortlist = [Int]()
-        
+
         // group modes by `scale, width, height` and then carefully winnow out improper modes in each group
-        let category = Array(0..<modesFromJSON.count).reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
+        let category = modesFromJSON.indices.reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
             category[modesFromJSON[i], default: []].append(i)
         }
 
-        
-        category.forEach { (key, arr) in
-            let sieve = Sieve.init(in: modesFromJSON, withIndexArray: arr)
-            
-            var bestMode = sieve.computdBestMode()
-            
-            if key == cursor {
-                if bestMode.allSatisfy({ modesFromJSON[modeIndex] ~= modesFromJSON[$0] }) {
-                    bestMode = [modeIndex]
-                } else if !bestMode.contains(modeIndex) {
-                    bestMode.append(modeIndex)
-                }
-            }
-            shortlist += bestMode
-        }
-        
         // key is only used to identify current mode setting
+        let shortlist = category.reduce(into:[]) { (shortlist: inout [Int], arg) in
+            shortlist += Sieve.computedBestMode(in: modesFromJSON,
+                                                withIndexArray: arg.1,
+                                                including: arg.0 == cursor ? modeIndex : nil)
+        }
       
-        
         self.displayInfo = shortlist
-            .map { MyDisplayMode.init(mode:modes[$0], modeFromJSON:modesFromJSON[$0]) }
+            .map { MyDisplayMode.init(mode:modes[$0],
+                                      modeFromJSON:modesFromJSON[$0]) }
             .sorted { $0.modeFromJSON < $1.modeFromJSON }
     }
     
@@ -458,12 +463,15 @@ class Screens {
     // used by -l
     func listDisplays() {
         for (i, m) in dm.enumerated() {
-            m.printForOneDisplay("Display \(i):")
+            let text = "(\(CGDisplayIsBuiltin(m.displayID) == 1 ? "Built-in" : "External") Display)"
+            m.printForOneDisplay("Display \(i) \(text):")
         }
     }
     
-    func listModes(_ displayIndex:Int) {
-        dm[displayIndex].printFormatForAllModes()
+    func listModes(_ i:Int) {
+        let text = "(\(CGDisplayIsBuiltin(dm[i].displayID) == 1 ? "Built-in" : "External") Display)"
+        print("Supported Modes for Display \(i) \(text):")
+        dm[i].printFormatForAllModes()
     }
     
     func set(with setting:DisplayUserSetting) {
@@ -549,7 +557,6 @@ func main() {
             displayIndex = index
         }
         if displayIndex < screens.displayCount {
-            print("Supported Modes for Display \(displayIndex):")
             screens.listModes(displayIndex)
         } else {
             print("Display index not found. List all available displays by:\n    screen-resolution-switcher -l")
