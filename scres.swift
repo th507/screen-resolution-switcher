@@ -272,7 +272,6 @@ struct Sieve {
 class DisplayManager {
   let displayID:CGDirectDisplayID,
       displayInfo:[MyDisplayMode],
-      modeID:Int32,
       mode: CGDisplayMode
 
   init(_ displayID:CGDirectDisplayID) {
@@ -283,7 +282,6 @@ class DisplayManager {
      */
     //omitting `self.` prefix
     mode = CGDisplayCopyDisplayMode(displayID)!
-    modeID = mode.ioDisplayModeID
 
     let option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary?
     let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
