@@ -60,24 +60,40 @@ struct CGDisplayModeFromJSON: Decodable {
 // use the object as key in a later process of mode filtering/winnowing
 extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
   // this is a hack to read private members in CGDisplayMode
-  static func decode(from modes:[CGDisplayMode]) -> [CGDisplayModeFromJSON]? {
+  static func decode(from modes:[CGDisplayMode], displayID:CGDirectDisplayID) -> [CGDisplayModeFromJSON]? {
     do {
       // first we operate the string to make it look like JSON String
       let modesJSONText = try CGDisplayModeFromJSON.replaces(in: String(reflecting:modes), replacement: self.replacement)
 
       // then we try to decode it as JSON
       let decoder = JSONDecoder()
-      let modesObject = try decoder.decode([CGDisplayModeFromJSON].self, from: modesJSONText.data(using: .utf8)!)
+      var modesFromJSON = try decoder.decode([CGDisplayModeFromJSON].self, from: modesJSONText.data(using: .utf8)!)
+
+      let displayRefreshRate = self.getAlternativeRefreshRate(by: displayID)
+      for i in 0..<modesFromJSON.count {
+        modesFromJSON[i].frequency = modesFromJSON[i].getRefreshRate(alternative:displayRefreshRate)
+      }
 
       // preliminary integrity check
-      guard modesObject.count == modes.count else { return nil }
+      guard modesFromJSON.count == modes.count else { return nil }
 
-      return modesObject
+      return modesFromJSON
     } catch {
       // TODO: catch error and warn user properly
       print(error)
       return nil
     }
+  }
+
+  static private func getAlternativeRefreshRate(by displayID:CGDirectDisplayID) -> Int {
+    var link:CVDisplayLink?
+    CVDisplayLinkCreateWithCGDisplay(displayID, &link)
+    
+    let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+    // timeValue is in fact already in Int64
+    let timeScale = Int64(time.timeScale) + time.timeValue / 2
+    
+    return Int( timeScale / time.timeValue )
   }
 
   enum StringOrDouble: Decodable {
@@ -177,7 +193,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }
   }
   
-  func getRefreshRate(by displayID:CGDirectDisplayID) -> Int {
+  func getRefreshRate(alternative:Int) -> Int {
     if let f = self.frequency { return f }
     
     let frequency:Int
@@ -187,17 +203,9 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }
 
     if frequency != 0 { return frequency }
-
-    var link:CVDisplayLink?
-    CVDisplayLinkCreateWithCGDisplay(displayID, &link)
     
-    let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
-    // timeValue is in fact already in Int64
-    let timeScale = Int64(time.timeScale) + time.timeValue / 2
-    
-    return Int( timeScale / time.timeValue )
+    return alternative 
   }
-
 }
 // utility functions in CGDisplayMode filtering
 struct Sieve {
@@ -289,15 +297,10 @@ class DisplayManager {
     
     let modeIndex = modes.firstIndex(of: mode)!
      
-    guard var modesFromJSON = CGDisplayModeFromJSON.decode(from: modes) else {
+    guard let modesFromJSON = CGDisplayModeFromJSON.decode(from: modes, displayID: displayID) else {
       self.displayInfo = []
       return
     }
-
-    for i in 0..<modesFromJSON.count {
-      modesFromJSON[i].frequency = modesFromJSON[i].getRefreshRate(by:displayID)
-    }
-   
 
     // group modes by `scale, width, height` and then carefully winnow out improper modes in each group            
     let category = Array(0..<modesFromJSON.count).reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
@@ -329,7 +332,6 @@ class DisplayManager {
       .flatMap { $0 }
       .map { MyDisplayMode.init(mode:modes[$0], modeFromJSON:modesFromJSON[$0]) }
       .sorted { $0.modeFromJSON < $1.modeFromJSON }
-      //.map { DisplayInfo(displayID: displayID, modeFromJSON: $0.modeFromJSON, mode: $0.mode) }
   }
   
   private func _format(_ di:MyDisplayMode, leadingString:String, trailingString:String) -> String {
