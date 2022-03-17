@@ -259,10 +259,7 @@ struct Sieve {
         case (0, 0): return []
         case (_, 0): return [ f[0] ]
         case (0, _): return [ r[0] ]
-        default:
-            let candidate = Array(Set(r).intersection(f))
-            guard candidate.count != 0 else { return [] }
-            return candidate
+        default: return Array(Set(r).intersection(f))
         }
     }
     func computedBestMode(in modesFromJSON:[CGDisplayModeFromJSON], including index:Int?) -> [Int] {
@@ -317,18 +314,16 @@ class DisplayManager {
         let cursor = modesFromJSON[modeIndex]
 
         // group modes by `scale, width, height` and then carefully winnow out improper modes in each group
-        let category = modesFromJSON.indices.reduce(into:[:]) { (category: inout [CGDisplayModeFromJSON:[Int]], i) in
-            category[modesFromJSON[i], default: []].append(i)
-        }
+        let category = Dictionary(grouping: modesFromJSON.indices, by: { modesFromJSON[$0] })
 
         // key is only used to identify current mode setting
-        let shortlist = category.reduce(into:[]) { (shortlist: inout [Int], arg) in
-            shortlist += Sieve.computedBestMode(in: modesFromJSON,
-                                                withIndexArray: arg.1,
-                                                including: arg.0 == cursor ? modeIndex : nil)
+        let list = category.reduce(into:[]) { (list: inout [Int], arg) in
+            list += Sieve.computedBestMode(in: modesFromJSON,
+                                           withIndexArray: arg.1,
+                                           including: arg.0 == cursor ? modeIndex : nil)
         }
       
-        self.displayInfo = shortlist
+        self.displayInfo = list
             .map { MyDisplayMode.init(mode:modes[$0],
                                       modeFromJSON:modesFromJSON[$0]) }
             .sorted { $0.modeFromJSON < $1.modeFromJSON }
