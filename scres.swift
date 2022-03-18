@@ -17,13 +17,126 @@ import CoreVideo
 import OSAKit
 import IOKit
 
+// get computed refreshrate
+fileprivate func _getAlternativeRefreshRate(by displayID:CGDirectDisplayID) -> Int {
+    var link:CVDisplayLink?
+    CVDisplayLinkCreateWithCGDisplay(displayID, &link)
+
+    let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
+    // timeValue is in fact already in Int64
+    let timeScale = Int64(time.timeScale) + time.timeValue / 2
+
+    return Int( timeScale / time.timeValue )
+}
+// for JSON hacking
+fileprivate func _replaces(in str:String) throws -> String {
+    let replacement = [
+        // bracket: remove CGDisplayMode and [
+        #"\<CGDisplayMode\s0x([0-9a-f]+)\>\s\["#: "",
+        // bracket: remove last ]
+        #"\](?!\n)"#: "",
+        // assignment & quotation: replace = with :
+        #"\ ="#: #"\"\ :"#,
+        // quotation: insert " at every new line execpt following by }
+        #"\n(?!\})\s*"#: "\n\"",
+        // separator: replace ; with ,
+        ";": ",",
+    ]
+
+    var out = str
+    for (key, value) in replacement {
+        let range = NSRange(out.startIndex..<out.endIndex, in:out)
+        let r = try NSRegularExpression(pattern: key, options: [])
+        out = r.stringByReplacingMatches(in: out, options: [], range: range, withTemplate: value)
+    }
+    // TODO: investigate why replacement fails
+    return out + "]"
+}
+
 // DisplayMode
-struct MyDisplayMode {
+struct MyDisplayMode: Equatable {
     let mode:CGDisplayMode
     let modeFromJSON:CGDisplayModeFromJSON
-    init(mode:CGDisplayMode, modeFromJSON:CGDisplayModeFromJSON) {
+    let isCurrent:Bool
+    init(mode:CGDisplayMode, modeFromJSON:CGDisplayModeFromJSON, isCurrent:Bool) {
         self.mode = mode
         self.modeFromJSON = modeFromJSON
+        self.isCurrent = isCurrent
+    }
+    // this is a hack to read private members in CGDisplayMode
+    static func batch(with modes: [CGDisplayMode], current: CGDisplayMode, displayID: CGDirectDisplayID) -> [MyDisplayMode]? {
+        do {
+            // first we operate the string to make it look like JSON String
+            let modesJSONText = try _replaces(in: String(reflecting:modes))
+            
+            // then we try to decode it as JSON
+            let decoder = JSONDecoder()
+            var modesFromJSON = try decoder.decode([CGDisplayModeFromJSON].self, from: modesJSONText.data(using: .utf8)!)
+            
+            let displayRefreshRate = _getAlternativeRefreshRate(by: displayID)
+
+            // preliminary integrity check
+            guard modesFromJSON.count == modes.count else { return nil }
+            
+            let array = modesFromJSON.indices.reduce(into:[]) { (array: inout [MyDisplayMode], i) in
+                modesFromJSON[i].updateRefreshRate(alternativeRate: displayRefreshRate)
+                
+                array.append(MyDisplayMode(mode: modes[i],
+                                        modeFromJSON: modesFromJSON[i],
+                                        isCurrent: modes[i] == current))
+            }
+
+            return array
+        } catch {
+            // TODO: catch error and warn user properly
+            print(error)
+            return nil
+        }
+    }
+    static func == (lhs: Self, rhs: Self) -> Bool { return lhs.mode == rhs.mode }
+}
+
+// utility functions in CGDisplayMode filtering
+extension Array where Element == MyDisplayMode {
+    func filterBestMode() -> [MyDisplayMode] {
+        let propertyList = ["frequency", "kCGDisplayHorizontalResolution", "DepthFormat"]
+        var result = [String:[MyDisplayMode]]()
+
+        for p in propertyList {
+            var max = 0
+            result[p] = []
+
+            self.forEach { mm in
+                if mm.modeFromJSON[p] > max {
+                    max = mm.modeFromJSON[p]
+                    result[p] = [ mm ]
+                } else if mm.modeFromJSON[p] == max { result[p]!.append(mm) }
+            }
+        }
+        
+        let f = result["frequency"]!.filter { result["DepthFormat"]!.contains($0) }
+        let r = result["kCGDisplayHorizontalResolution"]!.filter { result["DepthFormat"]!.contains($0) }
+
+        var out:[MyDisplayMode]
+        switch (f.count, r.count) {
+        case (0, 0): out = []
+        case (0, _): out = f
+        case (_, 0): out = r
+        default: out = f.filter { r.contains($0) }
+        }
+
+        if out.count == self.count { out = [ out[0] ] }
+
+        let cursor = self.filter { $0.isCurrent }
+        if cursor.count > 0 {
+            if out.allSatisfy({ $0.modeFromJSON ~= cursor[0].modeFromJSON  }) {
+                out = cursor
+            } else if !out.contains(where: { $0.mode == cursor[0].mode }) {
+                out.append(cursor[0])
+            }
+        }
+
+        return out
     }
 }
 
@@ -47,42 +160,6 @@ enum StringOrDouble: Decodable {
     enum Error: Swift.Error {
         case couldNotFindStringOrDouble
     }
-}
-
-// get computed refreshrate
-fileprivate func _getAlternativeRefreshRate(by displayID:CGDirectDisplayID) -> Int {
-    var link:CVDisplayLink?
-    CVDisplayLinkCreateWithCGDisplay(displayID, &link)
-    
-    let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link!)
-    // timeValue is in fact already in Int64
-    let timeScale = Int64(time.timeScale) + time.timeValue / 2
-    
-    return Int( timeScale / time.timeValue )
-}
-// for JSON hacking
-fileprivate func _replaces(in str:String) throws -> String {
-    let replacement = [
-        // bracket: remove CGDisplayMode and [
-        #"\<CGDisplayMode\s0x([0-9a-f]+)\>\s\["#: "",
-        // bracket: remove last ]
-        #"\](?!\n)"#: "",
-        // assignment & quotation: replace = with :
-        #"\ ="#: #"\"\ :"#,
-        // quotation: insert " at every new line execpt following by }
-        #"\n(?!\})\s*"#: "\n\"",
-        // separator: replace ; with ,
-        ";": ",",
-    ]
-    
-    var out = str
-    for (key, value) in replacement {
-        let range = NSRange(out.startIndex..<out.endIndex, in:out)
-        let r = try NSRegularExpression(pattern: key, options: [])
-        out = r.stringByReplacingMatches(in: out, options: [], range: range, withTemplate: value)
-    }
-    // TODO: investigate why replacement fails
-    return out + "]"
 }
 
 // for dealing with CGDisplayModeFromJSON.RefreshRate, which return String or Double 0 in various settings
@@ -159,32 +236,6 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
 }
 
 extension CGDisplayModeFromJSON {
-    // this is a hack to read private members in CGDisplayMode
-    static func decode(from modes:[CGDisplayMode], displayID:CGDirectDisplayID) -> [CGDisplayModeFromJSON]? {
-        do {
-            // first we operate the string to make it look like JSON String
-            let modesJSONText = try _replaces(in: String(reflecting:modes))
-            
-            // then we try to decode it as JSON
-            let decoder = JSONDecoder()
-            var modesFromJSON = try decoder.decode([CGDisplayModeFromJSON].self, from: modesJSONText.data(using: .utf8)!)
-            
-            let displayRefreshRate = _getAlternativeRefreshRate(by: displayID)
-            for i in 0..<modesFromJSON.count {
-                modesFromJSON[i].updateRefreshRate(alternativeRate: displayRefreshRate)
-            }
-            
-            // preliminary integrity check
-            guard modesFromJSON.count == modes.count else { return nil }
-            
-            return modesFromJSON
-        } catch {
-            // TODO: catch error and warn user properly
-            print(error)
-            return nil
-        }
-    }
-    
     mutating func updateRefreshRate(alternativeRate:Int) {
         if self.frequency != nil { return }
         
@@ -194,11 +245,7 @@ extension CGDisplayModeFromJSON {
         case .double(let d): frequency = Int( d.rounded() )
         }
         
-        if frequency != 0 {
-            self.frequency = frequency
-        } else {
-            self.frequency = alternativeRate
-        }
+        self.frequency = frequency != 0 ? frequency : alternativeRate
     }
 
     // for property loop in mode filtering
@@ -208,79 +255,11 @@ extension CGDisplayModeFromJSON {
             switch index {
             case "kCGDisplayHorizontalResolution": return self.kCGDisplayHorizontalResolution
             case "DepthFormat": return self.DepthFormat
-            case "BitsPerSample": return self.BitsPerSample
             case "scale":  return self.kCGDisplayPixelsWide / self.Width
             case "frequency": return self.frequency!
             default: return 0
             }
         }
-    }
-}
-
-// utility functions in CGDisplayMode filtering
-struct Sieve {
-    let propertyList = ["frequency", "kCGDisplayHorizontalResolution", "DepthFormat", "BitsPerSample"]
-    var largest:[String:Int]
-    var filtered:[String:[Int]]
-    
-    // invoking maxValue update & record-keeping
-    init(in modesFromJSON:[CGDisplayModeFromJSON], withIndexArray arr:[Int]) {
-        largest = [String:Int]()
-        filtered = [String:[Int]]()
-        for prop in propertyList {
-            largest[prop] = 0
-            filtered[prop] = []
-
-            arr.forEach { i in
-                switch modesFromJSON[i][prop] {
-                    // update for new maxValue
-                case let x where x > largest[prop]!:
-                    largest[prop] = x
-                    filtered[prop] = [i]
-                    // add record of elements for current maxValue
-                case let x where x == largest[prop]!:
-                    filtered[prop]!.append(i)
-                default: break
-                }
-                if filtered[prop]!.count == arr.count {
-                    filtered[prop] = [arr[0]]
-                }
-            }
-        }
-    }
-    // find the best mode for certain (but not all) condition
-    // similar to Arrow's law, we DO NOT guarantee the mode is uniformly the best
-    // but we do try to winnow out the bad modes ;)
-    func computedBestMode() -> [Int] {
-        let f = filtered["frequency"]!.filter { look(for: $0) }
-        let r = filtered["kCGDisplayHorizontalResolution"]!.filter { look(for: $0) }
-        
-        switch (f.count, r.count) {
-        case (0, 0): return []
-        case (_, 0): return [ f[0] ]
-        case (0, _): return [ r[0] ]
-        default: return Array(Set(r).intersection(f))
-        }
-    }
-    func computedBestMode(in modesFromJSON:[CGDisplayModeFromJSON], including index:Int?) -> [Int] {
-        var bestMode = self.computedBestMode()
-        if let modeIndex = index {
-            if bestMode.allSatisfy({ modesFromJSON[modeIndex] ~= modesFromJSON[$0] }) {
-                bestMode = [modeIndex]
-            } else if !bestMode.contains(modeIndex) {
-                bestMode.append(modeIndex)
-            }
-        }
-
-        return bestMode
-    }
-    static func computedBestMode(in modesFromJSON:[CGDisplayModeFromJSON], withIndexArray arr:[Int], including index:Int?) -> [Int] {
-        let sieve = Sieve.init(in: modesFromJSON, withIndexArray: arr)
-        return sieve.computedBestMode(in: modesFromJSON, including: index)
-    }
-
-    private func look(for element:Int) -> Bool {
-        return filtered["DepthFormat"]!.contains(element) && filtered["BitsPerSample"]!.contains(element)
     }
 }
 
@@ -295,37 +274,25 @@ class DisplayManager {
     init(_ displayID:CGDirectDisplayID) {
         self.displayID = displayID
         
-        /* TODO: try memeory manipulation
-         * https://stackoverflow.com/questions/8210824/
-         * https://opensource.apple.com/source/IOGraphics/IOGraphics-406/IOGraphicsFamily/IOKit/graphics/IOGraphicsTypes.h.auto.html
-         */
-        self.mode = CGDisplayCopyDisplayMode(displayID)!
+        /// TODO: try memeory manipulation
+        /// https://stackoverflow.com/questions/8210824/
+        /// https://opensource.apple.com/source/IOGraphics/IOGraphics-406/IOGraphicsFamily/IOKit/graphics/IOGraphicsTypes.h.auto.html
+        let currentMode = CGDisplayCopyDisplayMode(displayID)!
+        self.mode = currentMode
 
         let option = [kCGDisplayShowDuplicateLowResolutionModes:kCFBooleanTrue] as CFDictionary?
         let modes = (CGDisplayCopyAllDisplayModes(displayID, option) as! [CGDisplayMode])
             .filter { $0.isUsableForDesktopGUI() }
-        
-        let modeIndex = modes.firstIndex(of: mode)!
-        
-        guard let modesFromJSON = CGDisplayModeFromJSON.decode(from: modes, displayID: displayID) else {
+                
+        guard let modesZip = MyDisplayMode.batch(with: modes, current: currentMode, displayID: displayID) else {
             self.displayInfo = []
             return
         }
-        let cursor = modesFromJSON[modeIndex]
-
-        // group modes by `scale, width, height` and then carefully winnow out improper modes in each group
-        let category = Dictionary(grouping: modesFromJSON.indices, by: { modesFromJSON[$0] })
-
-        // key is only used to identify current mode setting
-        let list = category.reduce(into:[]) { (list: inout [Int], arg) in
-            list += Sieve.computedBestMode(in: modesFromJSON,
-                                           withIndexArray: arg.1,
-                                           including: arg.0 == cursor ? modeIndex : nil)
-        }
-      
-        self.displayInfo = list
-            .map { MyDisplayMode.init(mode:modes[$0],
-                                      modeFromJSON:modesFromJSON[$0]) }
+            
+        self.displayInfo = Dictionary(grouping: modesZip, by: { $0.modeFromJSON })
+            .values
+            .map { $0.filterBestMode() }
+            .joined()
             .sorted { $0.modeFromJSON < $1.modeFromJSON }
     }
     
@@ -423,11 +390,6 @@ struct DisplayUserSetting {
             scale = args[2]
             if args.count > 3 { height = args[3] }
         }
-    }
-    
-    // override a lesser-used operator to simplify display mode checks
-    static func == (lhs: Self, rhs: CGDisplayModeFromJSON) -> Bool {
-        return rhs == lhs
     }
 }
 
