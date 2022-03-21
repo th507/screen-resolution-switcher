@@ -82,8 +82,8 @@ struct MyDisplayMode: Equatable {
                 modesFromJSON[i].updateRefreshRate(alternativeRate: displayRefreshRate)
                 
                 array.append(MyDisplayMode(mode: modes[i],
-                                        modeFromJSON: modesFromJSON[i],
-                                        isCurrent: modes[i] == current))
+                                           modeFromJSON: modesFromJSON[i],
+                                           isCurrent: modes[i] === current))
             }
 
             return array
@@ -95,7 +95,6 @@ struct MyDisplayMode: Equatable {
     }
     static func == (lhs: Self, rhs: Self) -> Bool { return lhs.mode == rhs.mode }
     static func ~= (lhs: Self, rhs: Self) -> Bool { return lhs.modeFromJSON ~= rhs.modeFromJSON }
-
 }
 
 // utility functions in CGDisplayMode filtering
@@ -132,7 +131,7 @@ extension Array where Element == MyDisplayMode {
 
         let cursor = self.filter { $0.isCurrent }
         if cursor.count > 0 {
-            if out.allSatisfy({ $0 ~= cursor[0]  }) {
+            if out.allSatisfy({ $0 ~= cursor[0] }) {
                 out = cursor
             } else if !out.contains(where: { $0.mode == cursor[0].mode }) {
                 out.append(cursor[0])
