@@ -94,6 +94,8 @@ struct MyDisplayMode: Equatable {
         }
     }
     static func == (lhs: Self, rhs: Self) -> Bool { return lhs.mode == rhs.mode }
+    static func ~= (lhs: Self, rhs: Self) -> Bool { return lhs.modeFromJSON ~= rhs.modeFromJSON }
+
 }
 
 // utility functions in CGDisplayMode filtering
@@ -117,19 +119,20 @@ extension Array where Element == MyDisplayMode {
         let f = result["frequency"]!.filter { result["DepthFormat"]!.contains($0) }
         let r = result["kCGDisplayHorizontalResolution"]!.filter { result["DepthFormat"]!.contains($0) }
 
-        var out:[MyDisplayMode]
-        switch (f.count, r.count) {
-        case (0, 0): out = []
-        case (0, _): out = f
-        case (_, 0): out = r
-        default: out = f.filter { r.contains($0) }
+        var x = f.filter { r.contains($0) }
+        if x.count == 0 { x = (f + r) }
+        
+        var out = x.reduce(into:[]) { (out: inout [MyDisplayMode], e) in
+            if !out.contains(where: { $0 ~= e }) {
+                out.append(e)
+            }
         }
 
         if out.count == self.count { out = [ out[0] ] }
 
         let cursor = self.filter { $0.isCurrent }
         if cursor.count > 0 {
-            if out.allSatisfy({ $0.modeFromJSON ~= cursor[0].modeFromJSON  }) {
+            if out.allSatisfy({ $0 ~= cursor[0]  }) {
                 out = cursor
             } else if !out.contains(where: { $0.mode == cursor[0].mode }) {
                 out.append(cursor[0])
