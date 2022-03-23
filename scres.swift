@@ -214,7 +214,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     // strict comparison
     static func ~=(lhs: Self, rhs: Self) -> Bool {
         return lhs == rhs && lhs["frequency"] == rhs["frequency"] &&
-        lhs["kCGDisplayHorizontalResolution"] == rhs["kCGDisplayHorizontalResolution"]
+        lhs.kCGDisplayHorizontalResolution == rhs.kCGDisplayHorizontalResolution
     }
     
     // for sorting
@@ -255,8 +255,6 @@ extension CGDisplayModeFromJSON {
     subscript(index:String) -> Int {
         get {
             switch index {
-            case "kCGDisplayHorizontalResolution": return self.kCGDisplayHorizontalResolution
-            case "DepthFormat": return self.DepthFormat
             case "scale":  return self.kCGDisplayPixelsWide / self.Width
             case "frequency": return self.frequency!
             default: return 0
@@ -307,7 +305,7 @@ class DisplayManager {
             leadingString,
             mo.Width, mo.Height,
             mo["scale"], mo["frequency"],
-            mo["kCGDisplayHorizontalResolution"], mo["DepthFormat"],
+            mo.kCGDisplayHorizontalResolution, mo.DepthFormat,
             trailingString
         )
     }
