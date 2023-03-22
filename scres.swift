@@ -53,7 +53,7 @@ fileprivate func _replaces(in str:String) throws -> String {
     return out + "]"
 }
 
-// DisplayMode
+// DisplayMode generated from dumping CGDisplayMode private members
 struct MyDisplayMode: Equatable {
     let mode:CGDisplayMode
     let modeFromJSON:CGDisplayModeFromJSON
@@ -78,6 +78,7 @@ struct MyDisplayMode: Equatable {
             // preliminary integrity check
             guard modesFromJSON.count == modes.count else { return nil }
             
+            // for each modesFromJSon, update refresh rate and cast into MyDisplayMode
             let array = modesFromJSON.indices.reduce(into:[]) { (array: inout [MyDisplayMode], i) in
                 modesFromJSON[i].updateRefreshRate(alternativeRate: displayRefreshRate)
                 
@@ -100,6 +101,7 @@ struct MyDisplayMode: Equatable {
 // utility functions in CGDisplayMode filtering
 extension Array where Element == MyDisplayMode {
     func filterBestMode() -> [MyDisplayMode] {
+        // TODO: needs more explanations
         let propertyList = ["frequency", "kCGDisplayHorizontalResolution", "DepthFormat"]
         var result = [String:[MyDisplayMode]]()
 
@@ -144,6 +146,7 @@ extension Array where Element == MyDisplayMode {
 
 // a custom data type that stores String or Double
 // from https://medium.com/swlh/f6ea6a2babf8
+// used for CGDisplayModeFromJSON parsing
 enum StringOrDouble: Decodable {
     case double(Double)
     case string(String)
@@ -164,7 +167,8 @@ enum StringOrDouble: Decodable {
     }
 }
 
-// for dealing with CGDisplayModeFromJSON.RefreshRate, which return String or Double 0 in various settings
+// for dealing with CGDisplayModeFromJSON.RefreshRate,
+// which return String or Double 0 in various settings
 // this can be retrieved by printing CGDisplayMode
 struct CGDisplayModeFromJSON: Decodable {
     //var BitsPerPixel = 32;
@@ -198,7 +202,8 @@ struct CGDisplayModeFromJSON: Decodable {
     // additional mutating property that stores computed refreshrate
     var frequency:Int?
 }
-// use the object as key in a later process of mode filtering/winnowing
+
+// extension 1: use the object as key in a later process of mode filtering/winnowing
 extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(Width)
@@ -225,7 +230,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }
     
     // for setting comparison
-    static func == (lhs: Self, rhs: DisplayUserSetting) -> Bool {
+    static func == (lhs: Self, rhs: UserSetting) -> Bool {
         var bool = (lhs.Width == rhs.width)
         
         if rhs.height != nil { bool = bool && (rhs.height == lhs.Height) }
@@ -237,6 +242,7 @@ extension CGDisplayModeFromJSON: Hashable & Equatable & Comparable {
     }*/
 }
 
+// extension 2: for updating refresh rate in case default value needs recalculation
 extension CGDisplayModeFromJSON {
     mutating func updateRefreshRate(alternativeRate:Int) {
         if self.frequency != nil { return }
@@ -266,7 +272,7 @@ extension CGDisplayModeFromJSON {
 
 
 // DisplayMode & DisplayID management center
-class DisplayManager {
+class DManager {
     let displayID:CGDirectDisplayID,
         displayInfo:[MyDisplayMode],
         mode: CGDisplayMode
@@ -324,9 +330,9 @@ class DisplayManager {
         }
     }
     
-    func set(with setting: DisplayUserSetting) {
+    func set(with setting: UserSetting) {
         print("setting", setting)
-        // comparing DisplayUserSetting with DisplayInfo
+        // comparing UserSetting with DisplayInfo
         guard let di = displayInfo.last(where: { $0.modeFromJSON == setting }) else{
             print("This mode is unavailable")
             return
@@ -363,7 +369,7 @@ class DisplayManager {
 // 5    id, width, height
 // 6    id, width, scale
 // 7    id, width, height, scale
-struct DisplayUserSetting {
+struct UserSetting {
     static let MAX_SCALE = 10
     
     var displayIndex = 0, width = 0
@@ -382,7 +388,7 @@ struct DisplayUserSetting {
         
         if args.count == 2 { return }
         
-        if args[2] > DisplayUserSetting.MAX_SCALE {
+        if args[2] > UserSetting.MAX_SCALE {
             height = args[2]
             if args.count > 3 { scale = args[3] }
         }
@@ -399,7 +405,7 @@ class Screens {
     var maxDisplays = MAX_DISPLAYS
     // actual number of display
     var displayCount:Int = 0
-    var dm = [DisplayManager]()
+    var dm = [DManager]()
     
     init() {
         // actual number of display
@@ -413,7 +419,7 @@ class Screens {
         displayCount = Int( displayCount32 )
         dm = displayIDs
             .filter { $0 != 0 }
-            .map { DisplayManager($0) }
+            .map { DManager($0) }
     }
     
     // print a list of all displays
@@ -431,8 +437,10 @@ class Screens {
         dm[i].printFormatForAllModes()
     }
     
-    func set(with setting:DisplayUserSetting) {
+    func set(with setting:UserSetting) {
         dm[setting.displayIndex].set(with:setting)
+    }
+    func set(withID setting:Int) {
     }
 }
 
@@ -493,6 +501,7 @@ Here are some examples:
  -r 800           shorthand for -s 0 800 2
  -d               toggle macOS Dark Mode
  -sl              sleep display
+ -debugset modeID set display to mode with specific ID
 """)
 }
 
@@ -519,7 +528,10 @@ func main() {
             print("Display index not found. List all available displays by:\n    screen-resolution-switcher -l")
         }
     case "-s", "--set", "set", "-r", "--set-retina", "retina":
-        screens.set(with:DisplayUserSetting( arguments ))
+        screens.set(with:UserSetting( arguments ))
+    case "-debugset", "--debugset":
+        //screens.set(withID: arguments[2])
+        break
     case "-d", "--toggle-dark-mode":
         DarkMode().toggle()
     case "-sl", "--sleep", "sleep":
