@@ -302,45 +302,51 @@ class DManager {
             .sorted { $0.modeFromJSON < $1.modeFromJSON }
     }
     
-    private func _format(_ di:MyDisplayMode, leadingString:String, trailingString:String) -> String {
+    private func _format(_ di:MyDisplayMode, index:Int, leadingString:String, trailingString:String) -> String {
         let mo = di.modeFromJSON
         // We assume that 5 digits are enough to hold dimensions.
         // 100K monitor users will just have to live with a bit of formatting misalignment.
         return String(
-            format:"  %@ %6d x %5d  @ %1dx %5dHz %7d %9d%@",
+            format:"  %@ %6d x %5d  @ %1dx %5dHz %7d %9d %5d %@",
             leadingString,
             mo.Width, mo.Height,
             mo["scale"], mo["frequency"],
             mo.kCGDisplayHorizontalResolution, mo.DepthFormat,
+            index,
             trailingString
         )
     }
     
     func printForOneDisplay(_ leadingString:String) {
         let di = displayInfo.filter { $0.mode == self.mode }
-        print(_format(di[0], leadingString:leadingString, trailingString:""))
+        print(_format(di[0], index: 0, leadingString:leadingString, trailingString:""))
     }
     
     func printFormatForAllModes() {
-        print("     Width x Height @ Scale Refresh Resolution  ColorDepth")
+        print("     Width x Height @ Scale Refresh Resolution Depth   ModeIndex")
         
-        displayInfo.forEach { di in
+        /*displayInfo.forEach { di in
             let b = (di.mode == self.mode)
             print(_format(di, leadingString: b ? "\u{001B}[0;33m⮕" : " ", trailingString: b ? "\u{001B}[0;49m" : ""))
+        }*/
+        // adding index
+        for (n, di) in displayInfo.enumerated() {
+            let b = (di.mode == self.mode)
+            print(_format(di, 
+                          index: n, 
+                          leadingString: b ? "\u{001B}[0;33m⮕" : " ", 
+                          trailingString: b ? "\u{001B}[0;49m" : ""
+                         )
+            )
         }
     }
-    
-    func set(with setting: UserSetting) {
-        print("setting", setting)
-        // comparing UserSetting with DisplayInfo
-        guard let di = displayInfo.last(where: { $0.modeFromJSON == setting }) else{
-            print("This mode is unavailable")
-            return
-        }
-        guard di.mode != self.mode else {
+
+    private func set(withMode mode: CGDisplayMode) {
+        guard mode !== self.mode else {
             //print("Setting the same mode.")
             return
         }
+
         print("Setting display mode")
         
         var config:CGDisplayConfigRef?
@@ -350,13 +356,33 @@ class DManager {
             print(error)
             return
         }
-        CGConfigureDisplayWithDisplayMode(config, displayID, di.mode, nil)
+        CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
         
         let afterCheck = CGCompleteDisplayConfiguration(config, CGConfigureOption.permanently)
         if afterCheck != .success {
             print("setting failed")
             CGCancelDisplayConfiguration(config)
         }
+    }
+    
+    func set(with setting: UserSetting) {
+        print("setting", setting)
+        // comparing UserSetting with DisplayInfo
+        guard let di = displayInfo.last(where: { $0.modeFromJSON == setting }) else {
+            print("This mode is unavailable")
+            return
+        }
+
+        self.set(withMode: di.mode)
+    }
+    func set(withID id:Int) {
+        let di = displayInfo[id]
+        guard id < displayInfo.count else {
+            print("This mode is unavailable")
+            return
+        }
+
+        self.set(withMode: di.mode)
     }
 }
 
@@ -370,8 +396,6 @@ class DManager {
 // 6    id, width, scale
 // 7    id, width, height, scale
 struct UserSetting {
-    static let MAX_SCALE = 10
-    
     var displayIndex = 0, width = 0
     var height, scale:Int?
     init(_ arr:[String]) {
@@ -388,7 +412,7 @@ struct UserSetting {
         
         if args.count == 2 { return }
         
-        if args[2] > UserSetting.MAX_SCALE {
+        if args[2] > Screens.MAX_SCALE {
             height = args[2]
             if args.count > 3 { scale = args[3] }
         }
@@ -400,6 +424,8 @@ struct UserSetting {
 }
 
 class Screens {
+    // assume max HiDPI scale is 10
+    static let MAX_SCALE = 10
     // assume at most 8 display connected
     static let MAX_DISPLAYS = 8
     var maxDisplays = MAX_DISPLAYS
@@ -422,6 +448,9 @@ class Screens {
             .map { DManager($0) }
     }
     
+    /*WIP:::private func displayTypeText(id: Int) {
+        return "(\(CGDisplayIsBuiltin(m.displayID) == 1 ? "Built-in" : "External") Display)"
+    }*/
     // print a list of all displays
     // used by -l
     func listDisplays() {
@@ -440,7 +469,8 @@ class Screens {
     func set(with setting:UserSetting) {
         dm[setting.displayIndex].set(with:setting)
     }
-    func set(withID setting:Int) {
+    func setToModeIndex(with setting:UserSetting) {
+        dm[setting.displayIndex].set(withID:setting.width)
     }
 }
 
@@ -485,7 +515,8 @@ func seeHelp() {
     print("""
 Usage:
 screen-resolution-switcher [-h|--help] [-l|--list|list] [-m|--mode|mode displayIndex]
-[-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width],
+[-s|--set|set displayIndex width scale] [-r|--set-retina|retina displayIndex width]
+[-ds|--debugset|debugset displayIndex modeIndex]
 
 Here are some examples:
  -h               get help
@@ -501,7 +532,7 @@ Here are some examples:
  -r 800           shorthand for -s 0 800 2
  -d               toggle macOS Dark Mode
  -sl              sleep display
- -debugset modeID set display to mode with specific ID
+ -ds modeID       set display to mode with modeIndex
 """)
 }
 
@@ -529,8 +560,8 @@ func main() {
         }
     case "-s", "--set", "set", "-r", "--set-retina", "retina":
         screens.set(with:UserSetting( arguments ))
-    case "-debugset", "--debugset":
-        //screens.set(withID: arguments[2])
+    case "-ds", "-debugset", "--debugset", "debugset":
+        screens.setToModeIndex(with:UserSetting( arguments ))
         break
     case "-d", "--toggle-dark-mode":
         DarkMode().toggle()
